@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 
+from langfuse import propagate_attributes
+
 from internal_ax import langfuse_helpers as lf
 from internal_ax import scoring
 from internal_ax.config import RunConfig
@@ -37,7 +39,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str) -> RunResult:
     client = lf.client()
     try:
         with client.start_as_current_observation(as_type="span", name=config.label):
-            with client.propagate_attributes(
+            with propagate_attributes(
                 trace_name=config.label,
                 session_id=run_name,
                 metadata={"dataset_item_id": item.id, "run_config": config.key},

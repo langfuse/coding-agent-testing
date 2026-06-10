@@ -21,7 +21,6 @@ import modal
 
 from internal_ax.config import (
     MODAL_SECRET_NAME,
-    IN_PROCESS_RUN_TYPES,
     RunType,
     run_config_by_key,
     select_run_configs,
