@@ -51,6 +51,8 @@ def run(item: DatasetItem, config: RunConfig, run_name: str) -> RunResult:
                         {"role": "system", "content": SYSTEM},
                         {"role": "user", "content": item.prompt},
                     ],
+                    # Required by Anthropic's OpenAI-compat endpoint; also bounds cost.
+                    max_tokens=1024,
                 )
                 output = resp.choices[0].message.content or ""
             trace_id = client.get_current_trace_id()
