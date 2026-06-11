@@ -6,8 +6,8 @@ Topology:
                               (Langfuse aborts after 20s).
   orchestrate (function)   -- fetches the dataset, builds the item x run-config
                               matrix, fans out one `run_unit` per cell.
-  run_unit (function)      -- executes a single cell via the matching runner;
-                              for code agents it creates an isolated Sandbox.
+  run_unit (function)      -- executes a single cell (one item x one code agent)
+                              inside an isolated Modal Sandbox.
 
 Deploy:  modal deploy -m internal_ax.app
 """
@@ -36,14 +36,6 @@ _SECRET = modal.Secret.from_name(MODAL_SECRET_NAME)
 def _dispatch(item: DatasetItem, config, run_name: str):
     """Route one cell to its runner. Imports are local so cold starts stay light."""
     rt = config.run_type
-    if rt == RunType.BARE_MODEL:
-        from internal_ax.runners import bare_model
-
-        return bare_model.run(item, config, run_name)
-    if rt == RunType.SEARCH_MODEL:
-        from internal_ax.runners import search_model
-
-        return search_model.run(item, config, run_name)
     if rt == RunType.CLAUDE_CODE:
         from internal_ax.runners import claude_code
 
@@ -122,3 +114,20 @@ async def webhook(request) -> dict:
 
     call = orchestrate.spawn(payload)
     return {"status": "accepted", "function_call_id": call.object_id}
+
+
+@app.local_entrypoint()
+def smoke_test(dataset: str = "code-agent-readiness", run_configs: str = "", run_name: str = ""):
+    """Validate the full agent path without the webhook:
+
+        modal run -m internal_ax.app --dataset code-agent-readiness
+        modal run -m internal_ax.app --run-configs claude-code
+
+    Runs synchronously and prints the summary, so failures surface immediately.
+    """
+    payload: dict = {"datasetName": dataset, "payload": {}}
+    if run_configs:
+        payload["payload"]["run_configs"] = [k.strip() for k in run_configs.split(",") if k.strip()]
+    if run_name:
+        payload["payload"]["run_name"] = run_name
+    print(orchestrate.remote(payload))

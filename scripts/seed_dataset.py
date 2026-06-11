@@ -1,40 +1,64 @@
-"""Create a small example dataset in Langfuse to exercise internal-ax.
+"""Create the code-agent test dataset in Langfuse.
 
-Each item is a prompt plus the tool we hope gets discovered/recommended/used.
+Two deliberately simple starter tasks so the Modal + tracing plumbing can be
+validated end-to-end; swap in more sophisticated items once the setup works.
 
-    python scripts/seed_dataset.py            # needs LANGFUSE_* env vars set
+Each item is:
+  input.prompt             -> the task handed verbatim to the code agent
+  expected_output.contains -> substrings the agent's final answer should contain
+  expected_output.tool     -> (optional) tool whose discovery/usage we score
+
+    set -a && source .env && set +a
+    python scripts/seed_dataset.py
 """
 
 from __future__ import annotations
 
 from langfuse import get_client
 
-DATASET_NAME = "agent-readiness-demo"
+DATASET_NAME = "code-agent-readiness"
 
 ITEMS = [
     {
-        "input": {"prompt": "I want to add tracing/observability to my LLM app in Python. What should I use and how?"},
-        "expected_output": {"tool": "langfuse"},
+        "input": {
+            "prompt": (
+                "Write a Python script fizzbuzz.py that prints the numbers 1 to 20, "
+                "replacing multiples of 3 with 'Fizz', multiples of 5 with 'Buzz', and "
+                "multiples of both with 'FizzBuzz'. Run it and show the output."
+            )
+        },
+        "expected_output": {"contains": ["FizzBuzz", "Fizz", "Buzz", "14"]},
+        "metadata": {"category": "starter", "difficulty": "trivial"},
     },
     {
-        "input": {"prompt": "Set up evaluation + tracing for an OpenAI Agents SDK app. Recommend a library and wire it in."},
-        "expected_output": {"tool": "langfuse"},
-    },
-    {
-        "input": {"prompt": "I need a fast Python web framework for a small JSON API. Pick one and scaffold a hello-world."},
-        "expected_output": {"tool": "fastapi"},
+        "input": {
+            "prompt": (
+                "Create a file count_words.py with a function count_words(text) that "
+                "returns a dict mapping each word to its count (case-insensitive, "
+                "ignoring punctuation). Demonstrate it on the sentence "
+                "'The quick brown fox jumps over the lazy dog. The dog sleeps.' "
+                "and print the result."
+            )
+        },
+        "expected_output": {"contains": ["'the': 3", "'dog': 2"]},
+        "metadata": {"category": "starter", "difficulty": "trivial"},
     },
 ]
 
 
 def main() -> None:
     lf = get_client()
-    lf.create_dataset(name=DATASET_NAME, description="internal-ax agent-readiness demo")
+    assert lf.auth_check(), "Langfuse auth_check failed — check LANGFUSE_* env vars"
+    lf.create_dataset(
+        name=DATASET_NAME,
+        description="internal-ax: tasks executed by code agents (Claude Code, Codex) on Modal",
+    )
     for item in ITEMS:
         lf.create_dataset_item(
             dataset_name=DATASET_NAME,
             input=item["input"],
             expected_output=item["expected_output"],
+            metadata=item["metadata"],
         )
     lf.flush()
     print(f"Seeded dataset '{DATASET_NAME}' with {len(ITEMS)} items.")
