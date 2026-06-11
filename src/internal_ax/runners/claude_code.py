@@ -34,6 +34,7 @@ def _parse_result(stdout: str) -> str:
 
 
 def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
+    run_name = lf.run_name_for_config(run_name, config.key)
     started = dt.datetime.now(dt.timezone.utc)
     # Encode the run into user_id; this is our only correlation handle for Claude.
     user_id = f"axrun-{run_name}-{item.id}-{uuid.uuid4().hex[:8]}"[:128]
@@ -42,7 +43,13 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         res = run_agent(
             app,
             prompt=item.prompt,
-            env={"LANGFUSE_USER_ID": user_id, "TRACE_TO_LANGFUSE": "true"},
+            # IS_SANDBOX=1 lets `--dangerously-skip-permissions` run as root (the
+            # sandbox's only user); without it Claude Code refuses for security.
+            env={
+                "LANGFUSE_USER_ID": user_id,
+                "TRACE_TO_LANGFUSE": "true",
+                "IS_SANDBOX": "1",
+            },
             setup_cmds=[],
             agent_cmd='claude -p "$PROMPT" --output-format json --dangerously-skip-permissions',
         )

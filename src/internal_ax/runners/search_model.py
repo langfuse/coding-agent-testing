@@ -37,6 +37,7 @@ def _ensure_instrumented() -> None:
 
 
 def run(item: DatasetItem, config: RunConfig, run_name: str) -> RunResult:
+    run_name = lf.run_name_for_config(run_name, config.key)
     client = lf.client()
     try:
         _ensure_instrumented()

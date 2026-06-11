@@ -5,9 +5,18 @@ self-contained Node bundle baked into AGENT_IMAGE). Unlike the Claude plugin,
 this one honours LANGFUSE_CODEX_METADATA / LANGFUSE_CODEX_TAGS, so we inject the
 dataset item id + run name and correlate cleanly by metadata afterwards.
 
-NOTE(validate): confirm (1) the Codex plugin cache path / version dir written in
-setup below matches the plugin repo, and (2) that the Stop hook fires under the
-non-interactive `codex exec` subcommand. See README "Validate the agent path".
+NOTE(verified 2026-06): Codex *execution* works headlessly with the setup below,
+but the plugin's **Stop hook does NOT fire under `codex exec`** (verified in a
+Modal sandbox: the agent runs and writes a rollout, but no trace / `.langfuse`
+sidecar / hook log appears even with the plugin installed+enabled via
+`codex plugin add` and `plugin_hooks=true`, and `LANGFUSE_CODEX_FAIL_ON_ERROR`
+never trips). `codex exec` appears not to emit the Stop event that plugin hooks
+attach to. So `find_traces_by_metadata` returns nothing and this runner reports
+ok=False. Until the plugin supports exec-mode hooks, switch type 3b to native
+OTel export (see README "Validate the agent path") or drive Codex via a PTY that
+emits Stop. Two more things changed in current Codex (0.139): `codex login
+--api-key` was removed (pipe the key to `--with-api-key`), and `codex exec` needs
+`--skip-git-repo-check` outside a git repo and has no `--json` flag.
 """
 
 from __future__ import annotations
@@ -22,20 +31,23 @@ from internal_ax.langfuse_helpers import DatasetItem
 from internal_ax.runners import RunResult
 from internal_ax.runners._sandbox import run_agent
 
-# Place the baked plugin where Codex looks for it, and enable it. TODO(validate)
-# the version dir ("0.1.0") and plugin id against the plugin repo's current layout.
+# Authenticate Codex and install the tracing plugin the *official* way. A
+# hand-copied cache dir (the previous approach) is never registered and never
+# loads — `codex plugin add` writes the cache layout + manifest that makes the
+# plugin show as "installed, enabled".
 _CODEX_SETUP = [
-    "mkdir -p /root/.codex/plugins/cache/codex-observability-plugin/tracing/0.1.0",
-    "cp -r /opt/codex-langfuse-plugin/plugins/tracing/* "
-    "/root/.codex/plugins/cache/codex-observability-plugin/tracing/0.1.0/",
-    "printf '%s\\n' "
-    "'[features]' 'plugin_hooks = true' "
-    "'[plugins.\"tracing@codex-observability-plugin\"]' 'enabled = true' "
-    "> /root/.codex/config.toml",
+    # `--api-key` was removed; the supported headless auth reads the key from stdin.
+    'printf "%s" "$OPENAI_API_KEY" | codex login --with-api-key',
+    # Register the cloned repo as a local marketplace, then add the plugin.
+    "codex plugin marketplace add /opt/codex-langfuse-plugin",
+    "codex plugin add tracing@codex-observability-plugin </dev/null",
+    # Enable the plugin-hooks feature (separate gate from the plugin being enabled).
+    "printf '\\n[features]\\nplugin_hooks = true\\n' >> /root/.codex/config.toml",
 ]
 
 
 def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
+    run_name = lf.run_name_for_config(run_name, config.key)
     started = dt.datetime.now(dt.timezone.utc)
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
 
@@ -49,8 +61,12 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 "LANGFUSE_CODEX_TAGS": json.dumps(["internal-ax", run_name]),
             },
             setup_cmds=_CODEX_SETUP,
-            # TODO(validate) exact codex exec flags for non-interactive structured output.
-            agent_cmd='codex exec "$PROMPT" --json',
+            # No --json flag in current Codex; --skip-git-repo-check (untrusted dir)
+            # and the bypass flag let it run non-interactively without approval prompts.
+            agent_cmd=(
+                "codex exec --skip-git-repo-check "
+                '--dangerously-bypass-approvals-and-sandbox "$PROMPT"'
+            ),
         )
         output = res.stdout
         transcript = res.stdout + "\n" + res.stderr

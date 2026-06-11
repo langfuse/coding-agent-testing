@@ -74,6 +74,18 @@ def fetch_dataset_items(dataset_name: str) -> list[DatasetItem]:
     return items
 
 
+def run_name_for_config(base_run_name: str, run_config_key: str) -> str:
+    """Derive the per-config dataset-run name from the batch's base run name.
+
+    Langfuse keys a DatasetRunItem on ``(dataset_run, dataset_item)``, so if every
+    run-config linked under one shared ``run_name``, configs sharing a dataset item
+    would collide on that key and only the last-written trace would stay linked.
+    Giving each config its own run name keeps every config's trace linked and
+    matches Langfuse's experiment model: one run per variant, compared item-by-item.
+    """
+    return f"{base_run_name}-{run_config_key}"
+
+
 def link_trace_to_run(
     *,
     run_name: str,
@@ -106,21 +118,22 @@ def score_trace(*, trace_id: str, name: str, value: float | str, comment: str | 
 # only lets us set user_id, so we encode the run there.
 
 
-def _to_iso(t: dt.datetime) -> str:
-    return t.astimezone(dt.timezone.utc).isoformat()
-
-
 def find_traces_by_user_id(
-    user_id: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
+    user_id: str, *, since: dt.datetime, retries: int = 12, delay_s: float = 6.0
 ) -> list[str]:
     """Used for Claude Code: query traces tagged with our per-run user_id.
 
-    Plugin export is asynchronous (it flushes on the Stop/SessionEnd hook), so we
-    poll for a short window after the run finishes.
+    Plugin export is asynchronous (it flushes on the Stop/SessionEnd hook) AND
+    Langfuse then needs to ingest + index the trace before it's queryable by
+    user_id — on a busy project that lag was observed to exceed a minute, so we
+    poll patiently (the trace persists; we just have to outwait indexing).
     """
     api = client().api
     for _ in range(retries):
-        resp = api.trace.list(user_id=user_id, from_timestamp=_to_iso(since), limit=50)
+        resp = api.trace.list(
+            user_id=user_id, from_timestamp=since, limit=50,
+            request_options={"timeout_in_seconds": 30},
+        )
         ids = [t.id for t in getattr(resp, "data", [])]
         if ids:
             return ids
@@ -129,13 +142,16 @@ def find_traces_by_user_id(
 
 
 def find_traces_by_metadata(
-    key: str, value: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
+    key: str, value: str, *, since: dt.datetime, retries: int = 12, delay_s: float = 6.0
 ) -> list[str]:
     """Used for Codex: query traces by an injected metadata key/value."""
     api = client().api
     filt = json.dumps([{"column": "metadata", "operator": "=", "key": key, "value": value}])
     for _ in range(retries):
-        resp = api.trace.list(filter=filt, from_timestamp=_to_iso(since), limit=50)
+        resp = api.trace.list(
+            filter=filt, from_timestamp=since, limit=50,
+            request_options={"timeout_in_seconds": 30},
+        )
         ids = [t.id for t in getattr(resp, "data", [])]
         if ids:
             return ids

@@ -36,6 +36,7 @@ def _client_for(config: RunConfig):
 
 
 def run(item: DatasetItem, config: RunConfig, run_name: str) -> RunResult:
+    run_name = lf.run_name_for_config(run_name, config.key)
     client = lf.client()
     try:
         with client.start_as_current_observation(as_type="span", name=config.label):

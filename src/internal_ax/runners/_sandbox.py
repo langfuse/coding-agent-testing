@@ -46,3 +46,38 @@ def run_agent(app, *, prompt: str, env: dict[str, str], setup_cmds: list[str], a
         )
     finally:
         sb.terminate()
+
+
+async def arun_agent(
+    app, *, prompt: str, env: dict[str, str], setup_cmds: list[str], agent_cmd: str
+) -> SandboxResult:
+    """Async variant of :func:`run_agent` for use inside an event loop.
+
+    ``dataset.run_experiment`` runs tasks in an asyncio loop; using Modal's blocking
+    interfaces there warns and serializes the sandbox calls. Driving the sandbox via
+    Modal's ``.aio`` interfaces keeps the loop free so multiple sandbox-based
+    experiment items run concurrently (up to the experiment's ``max_concurrency``).
+    """
+    secrets = [
+        modal.Secret.from_name(MODAL_SECRET_NAME),
+        modal.Secret.from_dict({**env, "PROMPT": prompt}),
+    ]
+    sb = await modal.Sandbox.create.aio(
+        app=app,
+        image=AGENT_IMAGE,
+        secrets=secrets,
+        timeout=SANDBOX_TIMEOUT_S,
+    )
+    try:
+        for cmd in ["mkdir -p /workspace", *setup_cmds]:
+            p = await sb.exec.aio("bash", "-lc", cmd)
+            await p.wait.aio()
+        proc = await sb.exec.aio("bash", "-lc", f"cd /workspace && {agent_cmd}")
+        await proc.wait.aio()
+        return SandboxResult(
+            stdout=await proc.stdout.read.aio(),
+            stderr=await proc.stderr.read.aio(),
+            returncode=proc.returncode,
+        )
+    finally:
+        await sb.terminate.aio()

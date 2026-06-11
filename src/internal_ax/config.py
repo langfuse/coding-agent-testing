@@ -52,7 +52,10 @@ def default_run_configs() -> list[RunConfig]:
         RunConfig("bare-gpt", RunType.BARE_MODEL, "Bare model (GPT)", _openai_model()),
         RunConfig("search-gpt", RunType.SEARCH_MODEL, "Model + search (GPT)", _openai_model()),
         RunConfig("claude-code", RunType.CLAUDE_CODE, "Claude Code", ""),
-        RunConfig("codex", RunType.CODEX, "Codex", ""),
+        # Codex disabled for now: `codex exec` does not fire the observability
+        # plugin's Stop hook, so its runs can't be traced to Langfuse. Re-enable
+        # this line once exec-mode tracing works (or the native-OTel fallback lands).
+        # RunConfig("codex", RunType.CODEX, "Codex", ""),
     ]
 
 
