@@ -44,6 +44,14 @@ class DatasetItem:
         return str(self.input)
 
     @property
+    def expected_contains(self) -> list[str]:
+        """Substrings the agent's final answer should contain (task completion)."""
+        eo = self.expected_output
+        if isinstance(eo, dict) and isinstance(eo.get("contains"), list):
+            return [str(s) for s in eo["contains"]]
+        return []
+
+    @property
     def expected_tool(self) -> str | None:
         """The tool we expect to be discovered/recommended/used.
 
@@ -102,22 +110,37 @@ def score_trace(*, trace_id: str, name: str, value: float | str, comment: str | 
 
 # --- Correlation: find the trace a sandbox-side plugin created ------------------
 # The plugins create their own trace ids, so after a code-agent run we locate the
-# trace(s) it emitted and link them. Codex lets us tag with metadata; Claude Code
-# only lets us set user_id, so we encode the run there.
+# trace(s) it emitted and link them. Codex lets us tag traces with metadata; for
+# Claude Code we dictate the CLI session id (--session-id) and the plugin sets it
+# as the Langfuse session_id.
 
 
 def _to_iso(t: dt.datetime) -> str:
     return t.astimezone(dt.timezone.utc).isoformat()
 
 
-def find_traces_by_user_id(
-    user_id: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
+def find_traces_by_session_id(
+    session_id: str, *, since: dt.datetime, retries: int = 10, delay_s: float = 3.0
 ) -> list[str]:
-    """Used for Claude Code: query traces tagged with our per-run user_id.
+    """Used for Claude Code: query traces by the per-run session id we chose.
 
     Plugin export is asynchronous (it flushes on the Stop/SessionEnd hook), so we
     poll for a short window after the run finishes.
     """
+    api = client().api
+    for _ in range(retries):
+        resp = api.trace.list(session_id=session_id, from_timestamp=_to_iso(since), limit=50)
+        ids = [t.id for t in getattr(resp, "data", [])]
+        if ids:
+            return ids
+        time.sleep(delay_s)
+    return []
+
+
+def find_traces_by_user_id(
+    user_id: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
+) -> list[str]:
+    """Fallback correlation: query traces by a per-run user_id."""
     api = client().api
     for _ in range(retries):
         resp = api.trace.list(user_id=user_id, from_timestamp=_to_iso(since), limit=50)

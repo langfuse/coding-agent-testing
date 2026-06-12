@@ -1,18 +1,13 @@
 [project]
 name = "internal-ax"
 version = "0.1.0"
-description = "Agent-readiness tester: measure how well a tool is discovered, recommended, and used by LLMs and code agents. Triggered by Langfuse remote dataset runs, executed headlessly on Modal, traced back to Langfuse."
+description = "Code-agent readiness tester: run Claude Code and Codex headlessly on Modal against a Langfuse dataset, trace every run back to Langfuse."
 requires-python = ">=3.11"
 dependencies = [
     # Orchestration / hosting
     "modal>=0.64",
     # Tracing + dataset runs (Langfuse v4 line is OpenTelemetry-native)
     "langfuse>=4.0,<5",
-    # Run type 1 (bare model) + the Anthropic OpenAI-compatible endpoint path
-    "openai>=1.40",
-    # Run type 2 (model + web search / reasoning)
-    "openai-agents>=0.0.10",
-    "openinference-instrumentation-openai-agents>=0.1.0",
     # Webhook endpoint
     "fastapi>=0.110",
     "pydantic>=2.6",
