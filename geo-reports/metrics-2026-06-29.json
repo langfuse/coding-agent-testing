@@ -1,0 +1,1158 @@
+{
+  "dataset": "geo-prompts",
+  "generated_at": "2026-06-29T12:31:59.410263+00:00",
+  "latest_week": "2026-06-29",
+  "previous_week": "2026-06-23",
+  "health_score": 64.0,
+  "health_components": {
+    "unprompted_visibility": 0.571,
+    "share_of_voice": 0.755,
+    "recommend_rate": 0.65,
+    "positive_sentiment": 0.711,
+    "citation_rate": 0.463
+  },
+  "latest_pooled": {
+    "n": 160,
+    "mention_rate": 0.675,
+    "citation_rate": 0.23125,
+    "avg_position": 1.8240740740740742,
+    "avg_brands_per_answer": 3.6,
+    "recommend_rate": 0.65,
+    "top_recommend_rate": 0.33125,
+    "positive_sentiment_rate": 0.7105263157894737,
+    "accurate_rate": 0.70625,
+    "share_of_voice": 0.1888111888111888,
+    "sov_rank": 1,
+    "top_competitor": "langsmith",
+    "top_competitor_share": 0.15034965034965034,
+    "sov_breakdown": {
+      "langfuse": 0.1888111888111888,
+      "langsmith": 0.15034965034965034,
+      "arize": 0.13636363636363635,
+      "helicone": 0.08741258741258741,
+      "datadog": 0.07867132867132867,
+      "braintrust": 0.06293706293706294,
+      "deepeval": 0.04895104895104895,
+      "portkey": 0.04020979020979021,
+      "promptfoo": 0.04020979020979021,
+      "weave": 0.033216783216783216,
+      "traceloop": 0.03146853146853147,
+      "ragas": 0.03146853146853147,
+      "promptlayer": 0.027972027972027972,
+      "opik": 0.012237762237762238,
+      "galileo": 0.012237762237762238,
+      "honeyhive": 0.008741258741258742,
+      "lunary": 0.0034965034965034965,
+      "langwatch": 0.0034965034965034965,
+      "maxim": 0.0017482517482517483
+    },
+    "segments": {
+      "branded=competitor": {
+        "mention_rate": 0.8333333333333334,
+        "n": 36
+      },
+      "branded=langfuse": {
+        "mention_rate": 0.75,
+        "n": 40
+      },
+      "branded=none": {
+        "mention_rate": 0.5714285714285714,
+        "n": 84
+      },
+      "intent=awareness": {
+        "mention_rate": 0.8461538461538461,
+        "n": 13
+      },
+      "intent=brand-evaluation": {
+        "mention_rate": 0.75,
+        "n": 40
+      },
+      "intent=comparison": {
+        "mention_rate": 0.8235294117647058,
+        "n": 34
+      },
+      "intent=consideration": {
+        "mention_rate": 0.5342465753424658,
+        "n": 73
+      },
+      "topic=agent-observability": {
+        "mention_rate": 0.5,
+        "n": 24
+      },
+      "topic=comparisons": {
+        "mention_rate": 0.8461538461538461,
+        "n": 26
+      },
+      "topic=evaluation": {
+        "mention_rate": 0.46153846153846156,
+        "n": 26
+      },
+      "topic=langfuse-branded": {
+        "mention_rate": 0.75,
+        "n": 40
+      },
+      "topic=observability": {
+        "mention_rate": 0.75,
+        "n": 32
+      },
+      "topic=prompt-management": {
+        "mention_rate": 0.6666666666666666,
+        "n": 12
+      }
+    },
+    "rec_dist": {
+      "top_recommendation": 53,
+      "not_mentioned": 48,
+      "mentioned_only": 8,
+      "recommended": 51
+    },
+    "sent_dist": {
+      "positive": 81,
+      "not_applicable": 46,
+      "neutral": 15,
+      "mixed": 18
+    },
+    "acc_dist": {
+      "accurate": 113,
+      "no_claims": 43,
+      "not_applicable": 4
+    }
+  },
+  "previous_pooled": {
+    "n": 294,
+    "mention_rate": 0.7040816326530612,
+    "citation_rate": 0.14625850340136054,
+    "avg_position": 2.028985507246377,
+    "avg_brands_per_answer": 4.166666666666667,
+    "recommend_rate": 0.6632653061224489,
+    "top_recommend_rate": 0.2755102040816326,
+    "positive_sentiment_rate": 0.6911764705882353,
+    "accurate_rate": 0.6836734693877551,
+    "share_of_voice": 0.1689795918367347,
+    "sov_rank": 1,
+    "top_competitor": "langsmith",
+    "top_competitor_share": 0.14857142857142858,
+    "sov_breakdown": {
+      "langfuse": 0.1689795918367347,
+      "langsmith": 0.14857142857142858,
+      "arize": 0.13714285714285715,
+      "helicone": 0.09142857142857143,
+      "braintrust": 0.06938775510204082,
+      "datadog": 0.062040816326530614,
+      "weave": 0.04816326530612245,
+      "deepeval": 0.0473469387755102,
+      "promptfoo": 0.044081632653061226,
+      "ragas": 0.037551020408163265,
+      "traceloop": 0.035918367346938776,
+      "promptlayer": 0.027755102040816326,
+      "portkey": 0.026938775510204082,
+      "opik": 0.015510204081632653,
+      "galileo": 0.015510204081632653,
+      "honeyhive": 0.010612244897959184,
+      "lunary": 0.009795918367346938,
+      "langwatch": 0.0024489795918367346,
+      "maxim": 0.0008163265306122449
+    },
+    "segments": {
+      "branded=competitor": {
+        "mention_rate": 0.7142857142857143,
+        "n": 63
+      },
+      "branded=langfuse": {
+        "mention_rate": 0.94,
+        "n": 50
+      },
+      "branded=none": {
+        "mention_rate": 0.6353591160220995,
+        "n": 181
+      },
+      "intent=awareness": {
+        "mention_rate": 0.8571428571428571,
+        "n": 28
+      },
+      "intent=brand-evaluation": {
+        "mention_rate": 0.94,
+        "n": 50
+      },
+      "intent=comparison": {
+        "mention_rate": 0.7241379310344828,
+        "n": 58
+      },
+      "intent=consideration": {
+        "mention_rate": 0.5949367088607594,
+        "n": 158
+      },
+      "topic=agent-observability": {
+        "mention_rate": 0.5897435897435898,
+        "n": 39
+      },
+      "topic=comparisons": {
+        "mention_rate": 0.7692307692307693,
+        "n": 39
+      },
+      "topic=evaluation": {
+        "mention_rate": 0.4375,
+        "n": 64
+      },
+      "topic=langfuse-branded": {
+        "mention_rate": 0.94,
+        "n": 50
+      },
+      "topic=observability": {
+        "mention_rate": 0.8611111111111112,
+        "n": 72
+      },
+      "topic=prompt-management": {
+        "mention_rate": 0.5666666666666667,
+        "n": 30
+      }
+    },
+    "rec_dist": {
+      "recommended": 114,
+      "not_mentioned": 85,
+      "top_recommendation": 81,
+      "mentioned_only": 14
+    },
+    "sent_dist": {
+      "positive": 141,
+      "not_applicable": 90,
+      "neutral": 41,
+      "mixed": 22
+    },
+    "acc_dist": {
+      "accurate": 201,
+      "not_applicable": 16,
+      "no_claims": 75,
+      "partially_accurate": 2
+    }
+  },
+  "per_config_latest": {
+    "openai/gpt-5.5|web": {
+      "n": 26,
+      "mention_rate": 0.8846153846153846,
+      "citation_rate": 0.0,
+      "avg_position": 1.9565217391304348,
+      "avg_brands_per_answer": 5.384615384615385,
+      "recommend_rate": 0.7692307692307693,
+      "top_recommend_rate": 0.3076923076923077,
+      "positive_sentiment_rate": 0.5454545454545454,
+      "accurate_rate": 0.8846153846153846,
+      "share_of_voice": 0.16911764705882354,
+      "sov_rank": 1,
+      "top_competitor": "arize",
+      "top_competitor_share": 0.11029411764705882,
+      "sov_breakdown": {
+        "langfuse": 0.16911764705882354,
+        "arize": 0.11029411764705882,
+        "langsmith": 0.10294117647058823,
+        "datadog": 0.09558823529411764,
+        "weave": 0.08823529411764706,
+        "helicone": 0.08823529411764706,
+        "braintrust": 0.0661764705882353,
+        "galileo": 0.04411764705882353,
+        "portkey": 0.03676470588235294,
+        "promptlayer": 0.029411764705882353,
+        "opik": 0.029411764705882353,
+        "deepeval": 0.029411764705882353,
+        "promptfoo": 0.029411764705882353,
+        "traceloop": 0.022058823529411766,
+        "ragas": 0.022058823529411766,
+        "honeyhive": 0.014705882352941176,
+        "maxim": 0.007352941176470588,
+        "lunary": 0.007352941176470588,
+        "langwatch": 0.007352941176470588
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.875,
+          "n": 8
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.75,
+          "n": 8
+        },
+        "intent=awareness": {
+          "mention_rate": 1.0,
+          "n": 1
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.875,
+          "n": 8
+        },
+        "intent=consideration": {
+          "mention_rate": 0.7142857142857143,
+          "n": 7
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.75,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 0.875,
+          "n": 8
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        }
+      },
+      "rec_dist": {
+        "top_recommendation": 8,
+        "not_mentioned": 3,
+        "mentioned_only": 3,
+        "recommended": 12
+      },
+      "sent_dist": {
+        "positive": 12,
+        "not_applicable": 4,
+        "neutral": 6,
+        "mixed": 4
+      },
+      "acc_dist": {
+        "accurate": 23,
+        "no_claims": 3
+      }
+    },
+    "gemini-3.5-flash|none": {
+      "n": 61,
+      "mention_rate": 0.819672131147541,
+      "citation_rate": 0.06557377049180328,
+      "avg_position": 1.9,
+      "avg_brands_per_answer": 4.540983606557377,
+      "recommend_rate": 0.8032786885245902,
+      "top_recommend_rate": 0.4098360655737705,
+      "positive_sentiment_rate": 0.78,
+      "accurate_rate": 0.819672131147541,
+      "share_of_voice": 0.18050541516245489,
+      "sov_rank": 1,
+      "top_competitor": "langsmith",
+      "top_competitor_share": 0.16606498194945848,
+      "sov_breakdown": {
+        "langfuse": 0.18050541516245489,
+        "langsmith": 0.16606498194945848,
+        "arize": 0.1588447653429603,
+        "datadog": 0.09025270758122744,
+        "helicone": 0.06498194945848375,
+        "portkey": 0.06498194945848375,
+        "deepeval": 0.061371841155234655,
+        "braintrust": 0.05054151624548736,
+        "promptfoo": 0.04332129963898917,
+        "traceloop": 0.039711191335740074,
+        "ragas": 0.036101083032490974,
+        "promptlayer": 0.021660649819494584,
+        "weave": 0.010830324909747292,
+        "lunary": 0.0036101083032490976,
+        "honeyhive": 0.0036101083032490976,
+        "opik": 0.0036101083032490976
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.9230769230769231,
+          "n": 13
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.7368421052631579,
+          "n": 38
+        },
+        "intent=awareness": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.9166666666666666,
+          "n": 12
+        },
+        "intent=consideration": {
+          "mention_rate": 0.7272727272727273,
+          "n": 33
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.625,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 1.0,
+          "n": 8
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.5384615384615384,
+          "n": 13
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 0.9375,
+          "n": 16
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "top_recommendation": 25,
+        "recommended": 24,
+        "not_mentioned": 9,
+        "mentioned_only": 3
+      },
+      "sent_dist": {
+        "positive": 39,
+        "not_applicable": 11,
+        "neutral": 3,
+        "mixed": 8
+      },
+      "acc_dist": {
+        "accurate": 50,
+        "no_claims": 9,
+        "not_applicable": 2
+      }
+    },
+    "gpt-5.4|web": {
+      "n": 61,
+      "mention_rate": 0.5737704918032787,
+      "citation_rate": 0.5409836065573771,
+      "avg_position": 1.6285714285714286,
+      "avg_brands_per_answer": 2.6065573770491803,
+      "recommend_rate": 0.5573770491803278,
+      "top_recommend_rate": 0.32786885245901637,
+      "positive_sentiment_rate": 0.8108108108108109,
+      "accurate_rate": 0.5737704918032787,
+      "share_of_voice": 0.22012578616352202,
+      "sov_rank": 1,
+      "top_competitor": "langsmith",
+      "top_competitor_share": 0.16352201257861634,
+      "sov_breakdown": {
+        "langfuse": 0.22012578616352202,
+        "langsmith": 0.16352201257861634,
+        "helicone": 0.12578616352201258,
+        "arize": 0.11949685534591195,
+        "braintrust": 0.08176100628930817,
+        "datadog": 0.0440251572327044,
+        "deepeval": 0.0440251572327044,
+        "promptfoo": 0.0440251572327044,
+        "promptlayer": 0.03773584905660377,
+        "ragas": 0.031446540880503145,
+        "traceloop": 0.025157232704402517,
+        "weave": 0.025157232704402517,
+        "honeyhive": 0.012578616352201259,
+        "opik": 0.012578616352201259,
+        "langwatch": 0.006289308176100629,
+        "galileo": 0.006289308176100629
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.8461538461538461,
+          "n": 13
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.3684210526315789,
+          "n": 38
+        },
+        "intent=awareness": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.8333333333333334,
+          "n": 12
+        },
+        "intent=consideration": {
+          "mention_rate": 0.30303030303030304,
+          "n": 33
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.125,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 0.875,
+          "n": 8
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.38461538461538464,
+          "n": 13
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 0.5625,
+          "n": 16
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.5,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "top_recommendation": 20,
+        "not_mentioned": 26,
+        "recommended": 14,
+        "mentioned_only": 1
+      },
+      "sent_dist": {
+        "positive": 30,
+        "not_applicable": 24,
+        "neutral": 1,
+        "mixed": 6
+      },
+      "acc_dist": {
+        "accurate": 35,
+        "no_claims": 26
+      }
+    },
+    "claude-opus-4-8|web": {
+      "n": 12,
+      "mention_rate": 0.0,
+      "citation_rate": 0.0,
+      "avg_position": null,
+      "avg_brands_per_answer": 0.0,
+      "recommend_rate": 0.08333333333333333,
+      "top_recommend_rate": 0.0,
+      "positive_sentiment_rate": 0.0,
+      "accurate_rate": 0.4166666666666667,
+      "share_of_voice": 0.0,
+      "sov_rank": 1,
+      "top_competitor": null,
+      "top_competitor_share": 0.0,
+      "sov_breakdown": {
+        "langfuse": 0.0
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.0,
+          "n": 2
+        },
+        "branded=langfuse": {
+          "mention_rate": 0.0,
+          "n": 10
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 0.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.0,
+          "n": 2
+        },
+        "topic=comparisons": {
+          "mention_rate": 0.0,
+          "n": 2
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 0.0,
+          "n": 10
+        }
+      },
+      "rec_dist": {
+        "not_mentioned": 10,
+        "mentioned_only": 1,
+        "recommended": 1
+      },
+      "sent_dist": {
+        "not_applicable": 7,
+        "neutral": 5
+      },
+      "acc_dist": {
+        "not_applicable": 2,
+        "accurate": 5,
+        "no_claims": 5
+      }
+    }
+  },
+  "per_config_previous": {
+    "claude-opus-4-7|none": {
+      "n": 54,
+      "mention_rate": 0.42592592592592593,
+      "citation_rate": 0.037037037037037035,
+      "avg_position": 2.130434782608696,
+      "avg_brands_per_answer": 2.574074074074074,
+      "recommend_rate": 0.42592592592592593,
+      "top_recommend_rate": 0.14814814814814814,
+      "positive_sentiment_rate": 0.5714285714285714,
+      "accurate_rate": 0.5185185185185185,
+      "share_of_voice": 0.16546762589928057,
+      "sov_rank": 1,
+      "top_competitor": "langsmith",
+      "top_competitor_share": 0.12949640287769784,
+      "sov_breakdown": {
+        "langfuse": 0.16546762589928057,
+        "langsmith": 0.12949640287769784,
+        "arize": 0.12949640287769784,
+        "helicone": 0.09352517985611511,
+        "braintrust": 0.08633093525179857,
+        "weave": 0.05755395683453238,
+        "traceloop": 0.050359712230215826,
+        "datadog": 0.050359712230215826,
+        "deepeval": 0.04316546762589928,
+        "promptfoo": 0.04316546762589928,
+        "promptlayer": 0.03597122302158273,
+        "lunary": 0.02877697841726619,
+        "galileo": 0.02877697841726619,
+        "ragas": 0.02877697841726619,
+        "opik": 0.014388489208633094,
+        "portkey": 0.007194244604316547,
+        "langwatch": 0.007194244604316547
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.16666666666666666,
+          "n": 12
+        },
+        "branded=langfuse": {
+          "mention_rate": 0.7,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.4375,
+          "n": 32
+        },
+        "intent=awareness": {
+          "mention_rate": 0.5,
+          "n": 4
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 0.7,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.18181818181818182,
+          "n": 11
+        },
+        "intent=consideration": {
+          "mention_rate": 0.41379310344827586,
+          "n": 29
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.125,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 0.14285714285714285,
+          "n": 7
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.38461538461538464,
+          "n": 13
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 0.7,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 0.7,
+          "n": 10
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.3333333333333333,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "recommended": 15,
+        "not_mentioned": 30,
+        "top_recommendation": 8,
+        "mentioned_only": 1
+      },
+      "sent_dist": {
+        "positive": 12,
+        "not_applicable": 33,
+        "neutral": 5,
+        "mixed": 4
+      },
+      "acc_dist": {
+        "accurate": 28,
+        "not_applicable": 9,
+        "no_claims": 16,
+        "partially_accurate": 1
+      }
+    },
+    "claude-opus-4-8|none": {
+      "n": 60,
+      "mention_rate": 0.8833333333333333,
+      "citation_rate": 0.08333333333333333,
+      "avg_position": 2.169811320754717,
+      "avg_brands_per_answer": 5.166666666666667,
+      "recommend_rate": 0.8166666666666667,
+      "top_recommend_rate": 0.21666666666666667,
+      "positive_sentiment_rate": 0.5961538461538461,
+      "accurate_rate": 0.8166666666666667,
+      "share_of_voice": 0.17096774193548386,
+      "sov_rank": 1,
+      "top_competitor": "langsmith",
+      "top_competitor_share": 0.15806451612903225,
+      "sov_breakdown": {
+        "langfuse": 0.17096774193548386,
+        "langsmith": 0.15806451612903225,
+        "arize": 0.14193548387096774,
+        "helicone": 0.1064516129032258,
+        "braintrust": 0.06451612903225806,
+        "datadog": 0.05806451612903226,
+        "weave": 0.054838709677419356,
+        "deepeval": 0.041935483870967745,
+        "traceloop": 0.03870967741935484,
+        "promptfoo": 0.03870967741935484,
+        "promptlayer": 0.035483870967741936,
+        "ragas": 0.03225806451612903,
+        "galileo": 0.016129032258064516,
+        "opik": 0.012903225806451613,
+        "honeyhive": 0.012903225806451613,
+        "portkey": 0.00967741935483871,
+        "lunary": 0.0064516129032258064
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.9166666666666666,
+          "n": 12
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.8421052631578947,
+          "n": 38
+        },
+        "intent=awareness": {
+          "mention_rate": 1.0,
+          "n": 6
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.9090909090909091,
+          "n": 11
+        },
+        "intent=consideration": {
+          "mention_rate": 0.8181818181818182,
+          "n": 33
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.875,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 1.0,
+          "n": 8
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.5833333333333334,
+          "n": 12
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 1.0,
+          "n": 16
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "recommended": 36,
+        "top_recommendation": 13,
+        "mentioned_only": 4,
+        "not_mentioned": 7
+      },
+      "sent_dist": {
+        "positive": 31,
+        "neutral": 16,
+        "mixed": 5,
+        "not_applicable": 8
+      },
+      "acc_dist": {
+        "accurate": 49,
+        "no_claims": 10,
+        "not_applicable": 1
+      }
+    },
+    "openai/gpt-5.5|web": {
+      "n": 60,
+      "mention_rate": 0.7333333333333333,
+      "citation_rate": 0.03333333333333333,
+      "avg_position": 2.022727272727273,
+      "avg_brands_per_answer": 5.616666666666666,
+      "recommend_rate": 0.65,
+      "top_recommend_rate": 0.31666666666666665,
+      "positive_sentiment_rate": 0.75,
+      "accurate_rate": 0.6833333333333333,
+      "share_of_voice": 0.13056379821958458,
+      "sov_rank": 2,
+      "top_competitor": "langsmith",
+      "top_competitor_share": 0.13649851632047477,
+      "sov_breakdown": {
+        "langsmith": 0.13649851632047477,
+        "langfuse": 0.13056379821958458,
+        "arize": 0.11869436201780416,
+        "helicone": 0.0830860534124629,
+        "braintrust": 0.0712166172106825,
+        "datadog": 0.06824925816023739,
+        "weave": 0.06824925816023739,
+        "promptfoo": 0.04747774480712166,
+        "ragas": 0.04154302670623145,
+        "deepeval": 0.04154302670623145,
+        "traceloop": 0.03560830860534125,
+        "portkey": 0.03560830860534125,
+        "galileo": 0.02967359050445104,
+        "promptlayer": 0.026706231454005934,
+        "opik": 0.02373887240356083,
+        "honeyhive": 0.017804154302670624,
+        "lunary": 0.01483679525222552,
+        "langwatch": 0.005934718100890208,
+        "maxim": 0.002967359050445104
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.6923076923076923,
+          "n": 13
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.6756756756756757,
+          "n": 37
+        },
+        "intent=awareness": {
+          "mention_rate": 1.0,
+          "n": 6
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.75,
+          "n": 12
+        },
+        "intent=consideration": {
+          "mention_rate": 0.59375,
+          "n": 32
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.7142857142857143,
+          "n": 7
+        },
+        "topic=comparisons": {
+          "mention_rate": 0.75,
+          "n": 8
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.46153846153846156,
+          "n": 13
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 0.875,
+          "n": 16
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.5,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "top_recommendation": 19,
+        "recommended": 20,
+        "not_mentioned": 15,
+        "mentioned_only": 6
+      },
+      "sent_dist": {
+        "positive": 33,
+        "neutral": 10,
+        "not_applicable": 16,
+        "mixed": 1
+      },
+      "acc_dist": {
+        "accurate": 41,
+        "no_claims": 17,
+        "not_applicable": 2
+      }
+    },
+    "gemini-3.5-flash|none": {
+      "n": 60,
+      "mention_rate": 0.8,
+      "citation_rate": 0.016666666666666666,
+      "avg_position": 1.9791666666666667,
+      "avg_brands_per_answer": 4.316666666666666,
+      "recommend_rate": 0.7833333333333333,
+      "top_recommend_rate": 0.38333333333333336,
+      "positive_sentiment_rate": 0.7708333333333334,
+      "accurate_rate": 0.7833333333333333,
+      "share_of_voice": 0.18532818532818532,
+      "sov_rank": 1,
+      "top_competitor": "langsmith",
+      "top_competitor_share": 0.1776061776061776,
+      "sov_breakdown": {
+        "langfuse": 0.18532818532818532,
+        "langsmith": 0.1776061776061776,
+        "arize": 0.1583011583011583,
+        "helicone": 0.07335907335907337,
+        "deepeval": 0.06563706563706563,
+        "datadog": 0.06177606177606178,
+        "portkey": 0.05791505791505792,
+        "braintrust": 0.05791505791505792,
+        "promptfoo": 0.05019305019305019,
+        "ragas": 0.04633204633204633,
+        "traceloop": 0.02702702702702703,
+        "promptlayer": 0.023166023166023165,
+        "weave": 0.007722007722007722,
+        "honeyhive": 0.003861003861003861,
+        "opik": 0.003861003861003861
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.8461538461538461,
+          "n": 13
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.7297297297297297,
+          "n": 37
+        },
+        "intent=awareness": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.8333333333333334,
+          "n": 12
+        },
+        "intent=consideration": {
+          "mention_rate": 0.71875,
+          "n": 32
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.75,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 1.0,
+          "n": 8
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.3076923076923077,
+          "n": 13
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 1.0,
+          "n": 15
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "top_recommendation": 23,
+        "recommended": 24,
+        "not_mentioned": 12,
+        "mentioned_only": 1
+      },
+      "sent_dist": {
+        "positive": 37,
+        "neutral": 5,
+        "not_applicable": 12,
+        "mixed": 6
+      },
+      "acc_dist": {
+        "accurate": 47,
+        "no_claims": 12,
+        "not_applicable": 1
+      }
+    },
+    "gpt-5.4|web": {
+      "n": 60,
+      "mention_rate": 0.65,
+      "citation_rate": 0.55,
+      "avg_position": 1.8461538461538463,
+      "avg_brands_per_answer": 3.0,
+      "recommend_rate": 0.6166666666666667,
+      "top_recommend_rate": 0.3,
+      "positive_sentiment_rate": 0.717948717948718,
+      "accurate_rate": 0.6,
+      "share_of_voice": 0.21666666666666667,
+      "sov_rank": 1,
+      "top_competitor": "arize",
+      "top_competitor_share": 0.1388888888888889,
+      "sov_breakdown": {
+        "langfuse": 0.21666666666666667,
+        "arize": 0.1388888888888889,
+        "langsmith": 0.12777777777777777,
+        "helicone": 0.10555555555555556,
+        "braintrust": 0.07777777777777778,
+        "datadog": 0.06666666666666667,
+        "weave": 0.05,
+        "deepeval": 0.044444444444444446,
+        "promptfoo": 0.03888888888888889,
+        "traceloop": 0.03333333333333333,
+        "ragas": 0.03333333333333333,
+        "opik": 0.022222222222222223,
+        "promptlayer": 0.016666666666666666,
+        "honeyhive": 0.011111111111111112,
+        "portkey": 0.011111111111111112,
+        "lunary": 0.005555555555555556
+      },
+      "segments": {
+        "branded=competitor": {
+          "mention_rate": 0.9230769230769231,
+          "n": 13
+        },
+        "branded=langfuse": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "branded=none": {
+          "mention_rate": 0.4594594594594595,
+          "n": 37
+        },
+        "intent=awareness": {
+          "mention_rate": 0.8333333333333334,
+          "n": 6
+        },
+        "intent=brand-evaluation": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "intent=comparison": {
+          "mention_rate": 0.9166666666666666,
+          "n": 12
+        },
+        "intent=consideration": {
+          "mention_rate": 0.40625,
+          "n": 32
+        },
+        "topic=agent-observability": {
+          "mention_rate": 0.5,
+          "n": 8
+        },
+        "topic=comparisons": {
+          "mention_rate": 0.875,
+          "n": 8
+        },
+        "topic=evaluation": {
+          "mention_rate": 0.46153846153846156,
+          "n": 13
+        },
+        "topic=langfuse-branded": {
+          "mention_rate": 1.0,
+          "n": 10
+        },
+        "topic=observability": {
+          "mention_rate": 0.6666666666666666,
+          "n": 15
+        },
+        "topic=prompt-management": {
+          "mention_rate": 0.3333333333333333,
+          "n": 6
+        }
+      },
+      "rec_dist": {
+        "top_recommendation": 18,
+        "not_mentioned": 21,
+        "recommended": 19,
+        "mentioned_only": 2
+      },
+      "sent_dist": {
+        "positive": 28,
+        "mixed": 6,
+        "not_applicable": 21,
+        "neutral": 5
+      },
+      "acc_dist": {
+        "accurate": 36,
+        "no_claims": 20,
+        "not_applicable": 3,
+        "partially_accurate": 1
+      }
+    }
+  },
+  "wow_like_for_like": [
+    {
+      "config": "gemini-3.5-flash|none",
+      "mention_prev": 0.8,
+      "mention_new": 0.819672131147541,
+      "rec_prev": 0.7833333333333333,
+      "rec_new": 0.8032786885245902,
+      "sov_prev": 0.18532818532818532,
+      "sov_new": 0.18050541516245489
+    },
+    {
+      "config": "gpt-5.4|web",
+      "mention_prev": 0.65,
+      "mention_new": 0.5737704918032787,
+      "rec_prev": 0.6166666666666667,
+      "rec_new": 0.5573770491803278,
+      "sov_prev": 0.21666666666666667,
+      "sov_new": 0.22012578616352202
+    },
+    {
+      "config": "openai/gpt-5.5|web",
+      "mention_prev": 0.7333333333333333,
+      "mention_new": 0.8846153846153846,
+      "rec_prev": 0.65,
+      "rec_new": 0.7692307692307693,
+      "sov_prev": 0.13056379821958458,
+      "sov_new": 0.16911764705882354
+    }
+  ],
+  "config_changes_vs_prev": [
+    "claude-opus-4-7|none",
+    "claude-opus-4-8|none",
+    "claude-opus-4-8|web"
+  ],
+  "all_dates": [
+    "2026-06-29",
+    "2026-06-23",
+    "2026-06-17",
+    "2026-06-12"
+  ]
+}
