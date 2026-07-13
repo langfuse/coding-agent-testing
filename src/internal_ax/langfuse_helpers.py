@@ -55,9 +55,10 @@ class DatasetItem:
     def env_folder(self) -> str | None:
         """Name of a starter workspace under this repo's ``envs/`` directory.
 
-        Set via ``metadata.env_folder``. The folder is baked into the agent
-        image at ``/opt/envs/<name>`` and copied into the sandbox's /workspace
-        before the agent starts, so the prompt can reference "this application".
+        Set via ``metadata.env_folder``. The folder ships with the orchestrator
+        image at ``/opt/envs/<name>`` and is uploaded into the sandbox's
+        /workspace before the agent starts, so the prompt can reference "this
+        application".
         """
         name = self.metadata.get("env_folder")
         return str(name) if name else None
@@ -126,8 +127,9 @@ def score_trace(*, trace_id: str, name: str, value: float | str, comment: str | 
 # as the Langfuse session_id.
 
 
-def _to_iso(t: dt.datetime) -> str:
-    return t.astimezone(dt.timezone.utc).isoformat()
+def _utc(t: dt.datetime) -> dt.datetime:
+    """The v4 API client requires a tz-aware datetime (it serializes it itself)."""
+    return t.astimezone(dt.timezone.utc)
 
 
 def find_traces_by_session_id(
@@ -140,7 +142,7 @@ def find_traces_by_session_id(
     """
     api = client().api
     for _ in range(retries):
-        resp = api.trace.list(session_id=session_id, from_timestamp=_to_iso(since), limit=50)
+        resp = api.trace.list(session_id=session_id, from_timestamp=_utc(since), limit=50)
         ids = [t.id for t in getattr(resp, "data", [])]
         if ids:
             return ids
@@ -154,7 +156,7 @@ def find_traces_by_user_id(
     """Fallback correlation: query traces by a per-run user_id."""
     api = client().api
     for _ in range(retries):
-        resp = api.trace.list(user_id=user_id, from_timestamp=_to_iso(since), limit=50)
+        resp = api.trace.list(user_id=user_id, from_timestamp=_utc(since), limit=50)
         ids = [t.id for t in getattr(resp, "data", [])]
         if ids:
             return ids
@@ -169,7 +171,7 @@ def find_traces_by_metadata(
     api = client().api
     filt = json.dumps([{"column": "metadata", "operator": "=", "key": key, "value": value}])
     for _ in range(retries):
-        resp = api.trace.list(filter=filt, from_timestamp=_to_iso(since), limit=50)
+        resp = api.trace.list(filter=filt, from_timestamp=_utc(since), limit=50)
         ids = [t.id for t in getattr(resp, "data", [])]
         if ids:
             return ids

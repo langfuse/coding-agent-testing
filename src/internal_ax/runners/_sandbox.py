@@ -31,16 +31,10 @@ def _resolve_env_folder(name: str) -> Path:
 
 
 def _upload_dir(sb: modal.Sandbox, src: Path, dest: str) -> None:
-    """Copy a local directory tree into the sandbox via the sandbox FS API."""
-    files = [p for p in sorted(src.rglob("*")) if p.is_file()]
-    subdirs = {str(Path(dest) / p.parent.relative_to(src)) for p in files}
-    mkdir = sb.exec("mkdir", "-p", *sorted(subdirs))
-    mkdir.wait()
-    if mkdir.returncode != 0:
-        raise RuntimeError(f"mkdir for env folder failed: {mkdir.stderr.read()}")
-    for p in files:
-        with sb.open(str(Path(dest) / p.relative_to(src)), "wb") as fh:
-            fh.write(p.read_bytes())
+    """Copy a local directory tree into the sandbox (parent dirs auto-created)."""
+    for p in sorted(src.rglob("*")):
+        if p.is_file():
+            sb.filesystem.copy_from_local(p, str(Path(dest) / p.relative_to(src)))
 
 
 @dataclass
