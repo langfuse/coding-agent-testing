@@ -35,17 +35,17 @@ app = modal.App("internal-ax")
 _SECRETS = [modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES]
 
 
-def _dispatch(item: DatasetItem, config, run_name: str):
+def _dispatch(item: DatasetItem, config, run_name: str, model: str | None):
     """Route one cell to its runner. Imports are local so cold starts stay light."""
     rt = config.run_type
     if rt == RunType.CLAUDE_CODE:
         from internal_ax.runners import claude_code
 
-        return claude_code.run(item, config, run_name, app)
+        return claude_code.run(item, config, run_name, app, model=model)
     if rt == RunType.CODEX:
         from internal_ax.runners import codex
 
-        return codex.run(item, config, run_name, app)
+        return codex.run(item, config, run_name, app, model=model)
     raise ValueError(f"unknown run type: {rt}")
 
 
@@ -55,7 +55,7 @@ def run_unit(unit: dict) -> dict:
     config = run_config_by_key(unit["config_key"])
     if config is None:
         return {"ok": False, "error": f"unknown run config {unit['config_key']}"}
-    return _dispatch(item, config, unit["run_name"]).as_dict()
+    return _dispatch(item, config, unit["run_name"], unit.get("model")).as_dict()
 
 
 @app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=3600)
@@ -72,6 +72,9 @@ def orchestrate(payload: dict) -> dict:
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
     base_run_name = cfg.get("run_name") or f"{dataset_name}-{ts}"
     run_configs = select_run_configs(cfg.get("run_configs"))
+    # Optional per-agent model override, e.g. {"claude-code": "opus", "codex": "gpt-5.5-codex"}.
+    # Unset -> each CLI's default (currently claude-sonnet-4-6 / gpt-5.5).
+    models = cfg.get("models") or {}
 
     items = fetch_dataset_items(dataset_name)
     # One Langfuse experiment (dataset run) PER agent: "<base>-<config key>",
@@ -86,6 +89,7 @@ def orchestrate(payload: dict) -> dict:
             },
             "config_key": rc.key,
             "run_name": f"{base_run_name}-{rc.key}",
+            "model": models.get(rc.key),
         }
         for it in items
         for rc in run_configs

@@ -34,7 +34,9 @@ def _parse_result(stdout: str) -> str:
         return stdout
 
 
-def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
+def run(
+    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+) -> RunResult:
     session_id = str(uuid.uuid4())  # we choose it; the plugin reports it to Langfuse
     # Shown as the trace's user in the Langfuse UI — pure annotation.
     user_id = f"internal-ax-{run_name}-{item.id}"[:128]
@@ -43,21 +45,28 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
     # trace id is known before the agent even starts — no discovery queries.
     trace_id = lf.deterministic_trace_id(f"{session_id}:1")
 
+    env = {
+        "TRACE_TO_LANGFUSE": "true",  # repo hook ignores it; docs' manual hook requires it
+        "LANGFUSE_USER_ID": user_id,
+        "IS_SANDBOX": "1",
+        "CLAUDE_SESSION_ID": session_id,
+        "CC_LANGFUSE_TRACE_SEED": session_id,
+    }
+    # Payload-provided model rides in as an env var so it's never shell-interpolated.
+    model_flag = ""
+    if model:
+        env["AGENT_MODEL"] = model
+        model_flag = ' --model "$AGENT_MODEL"'
+
     try:
         res = run_agent(
             app,
             prompt=item.prompt,
-            env={
-                "TRACE_TO_LANGFUSE": "true",  # repo hook ignores it; docs' manual hook requires it
-                "LANGFUSE_USER_ID": user_id,
-                "IS_SANDBOX": "1",
-                "CLAUDE_SESSION_ID": session_id,
-                "CC_LANGFUSE_TRACE_SEED": session_id,
-            },
+            env=env,
             setup_cmds=[],
             agent_cmd=(
                 'claude -p "$PROMPT" --session-id "$CLAUDE_SESSION_ID" '
-                "--output-format json --dangerously-skip-permissions < /dev/null"
+                f"--output-format json --dangerously-skip-permissions{model_flag} < /dev/null"
             ),
             env_folder=item.env_folder,
         )
@@ -77,7 +86,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 dataset_item_id=item.id,
                 trace_id=tid,
                 run_description=f"{config.label} via internal-ax on Modal",
-                metadata={"agent": config.key, "harness": "internal-ax"},
+                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
             )
         lf.flush()
 

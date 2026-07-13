@@ -183,10 +183,17 @@ the token appended**:
 https://<workspace>--internal-ax-webhook.modal.run?token=<WEBHOOK_SECRET>
 ```
 
-Optionally set a default **payload** (JSON) to narrow the matrix or name the run:
+Optionally set a default **payload** (JSON) to narrow the matrix, name the run,
+or pin per-agent models (unset = each CLI's default; currently
+`claude-sonnet-4-6` for Claude Code, `gpt-5.5` for Codex — the model used is
+recorded per generation in the trace and as run metadata):
 
 ```json
-{ "run_configs": ["claude-code", "codex"], "run_name": "baseline-2026-06" }
+{
+  "run_configs": ["claude-code", "codex"],
+  "run_name": "baseline-2026-06",
+  "models": { "claude-code": "opus", "codex": "gpt-5.5-codex" }
+}
 ```
 
 > Langfuse's remote-run webhook sends **no signature/auth header** and **no

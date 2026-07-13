@@ -37,7 +37,9 @@ _CODEX_SETUP = [
 ]
 
 
-def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
+def run(
+    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+) -> RunResult:
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
     # The plugin (>= PR #24) derives main-thread trace ids from
     # LANGFUSE_CODEX_TRACE_SEED as createTraceId(f"{seed}:{turn}"); one
@@ -45,16 +47,23 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
     trace_seed = str(uuid.uuid4())
     trace_id = lf.deterministic_trace_id(f"{trace_seed}:1")
 
+    env = {
+        "TRACE_TO_LANGFUSE": "true",
+        "LANGFUSE_CODEX_TRACE_SEED": trace_seed,
+        "LANGFUSE_CODEX_METADATA": json.dumps(metadata),
+        "LANGFUSE_CODEX_TAGS": json.dumps(["internal-ax", run_name]),
+    }
+    # Payload-provided model rides in as an env var so it's never shell-interpolated.
+    model_flag = ""
+    if model:
+        env["AGENT_MODEL"] = model
+        model_flag = ' --model "$AGENT_MODEL"'
+
     try:
         res = run_agent(
             app,
             prompt=item.prompt,
-            env={
-                "TRACE_TO_LANGFUSE": "true",
-                "LANGFUSE_CODEX_TRACE_SEED": trace_seed,
-                "LANGFUSE_CODEX_METADATA": json.dumps(metadata),
-                "LANGFUSE_CODEX_TAGS": json.dumps(["internal-ax", run_name]),
-            },
+            env=env,
             setup_cmds=_CODEX_SETUP,
             # < /dev/null: with an open (non-TTY) stdin pipe, codex exec prints
             # "Reading additional input from stdin..." and blocks forever.
@@ -62,7 +71,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
             # invoke the Langfuse tracing hook manually over each rollout the
             # session wrote; the plugin's sidecar files dedupe repeat uploads.
             agent_cmd=(
-                'codex exec "$PROMPT" --json --skip-git-repo-check '
+                f'codex exec "$PROMPT" --json --skip-git-repo-check{model_flag} '
                 "--dangerously-bypass-hook-trust --sandbox danger-full-access "
                 f"--output-last-message {_LAST_MESSAGE_PATH} < /dev/null; rc=$?; "
                 'HOOK=$(find /root/.codex -path "*/tracing*/dist/index.mjs" 2>/dev/null | head -1); '
@@ -89,7 +98,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 dataset_item_id=item.id,
                 trace_id=tid,
                 run_description=f"{config.label} via internal-ax on Modal",
-                metadata={"agent": config.key, "harness": "internal-ax"},
+                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
             )
         lf.flush()
 
