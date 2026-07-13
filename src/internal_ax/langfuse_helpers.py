@@ -132,6 +132,27 @@ def _utc(t: dt.datetime) -> dt.datetime:
     return t.astimezone(dt.timezone.utc)
 
 
+def _poll_trace_ids(list_kwargs: dict, retries: int, delay_s: float) -> list[str]:
+    """Poll trace.list until it returns ids, retrying through transient API
+    errors (ReadTimeout etc.) — one hiccup must not fail a whole agent run."""
+    api = client().api
+    last_err: Exception | None = None
+    for _ in range(retries):
+        try:
+            resp = api.trace.list(limit=50, **list_kwargs)
+        except Exception as e:  # noqa: BLE001 — bounded retries, then give up
+            last_err = e
+            time.sleep(delay_s)
+            continue
+        ids = [t.id for t in getattr(resp, "data", [])]
+        if ids:
+            return ids
+        time.sleep(delay_s)
+    if last_err is not None:
+        print(f"trace lookup gave up after retries; last error: {last_err!r}")
+    return []
+
+
 def find_traces_by_session_id(
     session_id: str, *, since: dt.datetime, retries: int = 10, delay_s: float = 3.0
 ) -> list[str]:
@@ -140,47 +161,28 @@ def find_traces_by_session_id(
     Plugin export is asynchronous (it flushes on the Stop/SessionEnd hook), so we
     poll for a short window after the run finishes.
     """
-    api = client().api
-    for _ in range(retries):
-        resp = api.trace.list(session_id=session_id, from_timestamp=_utc(since), limit=50)
-        ids = [t.id for t in getattr(resp, "data", [])]
-        if ids:
-            return ids
-        time.sleep(delay_s)
-    return []
+    return _poll_trace_ids(
+        {"session_id": session_id, "from_timestamp": _utc(since)}, retries, delay_s
+    )
 
 
 def find_traces_by_user_id(
     user_id: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
 ) -> list[str]:
     """Fallback correlation: query traces by a per-run user_id."""
-    api = client().api
-    for _ in range(retries):
-        resp = api.trace.list(user_id=user_id, from_timestamp=_utc(since), limit=50)
-        ids = [t.id for t in getattr(resp, "data", [])]
-        if ids:
-            return ids
-        time.sleep(delay_s)
-    return []
+    return _poll_trace_ids({"user_id": user_id, "from_timestamp": _utc(since)}, retries, delay_s)
 
 
 def find_traces_by_metadata(
     key: str, value: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
 ) -> list[str]:
     """Used for Codex: query traces by an injected metadata key/value."""
-    api = client().api
     # The filter union is discriminated on "type"; metadata key lookups are
     # "stringObject" filters — omitting type yields a 400 invalid_union.
     filt = json.dumps(
         [{"type": "stringObject", "column": "metadata", "operator": "=", "key": key, "value": value}]
     )
-    for _ in range(retries):
-        resp = api.trace.list(filter=filt, from_timestamp=_utc(since), limit=50)
-        ids = [t.id for t in getattr(resp, "data", [])]
-        if ids:
-            return ids
-        time.sleep(delay_s)
-    return []
+    return _poll_trace_ids({"filter": filt, "from_timestamp": _utc(since)}, retries, delay_s)
 
 
 def flush() -> None:
