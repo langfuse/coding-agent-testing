@@ -18,10 +18,11 @@ from pathlib import Path
 
 import modal
 
-# Starter workspaces for dataset items (metadata.env_folder). Baked into
-# AGENT_IMAGE at /opt/envs/<name> and copied into the sandbox's /workspace by
-# the runner, so agents start inside a realistic project. copy=True: contents
-# become an image layer (sandbox-safe; rebuilds only when a folder changes).
+# Starter workspaces for dataset items (metadata.env_folder). Shipped with the
+# ORCHESTRATOR image at /opt/envs and uploaded into each sandbox's /workspace
+# by the runner. They must ride with the orchestrator (not AGENT_IMAGE):
+# AGENT_IMAGE is hydrated inside the remote run_unit container, where repo-local
+# add_local_dir sources don't exist.
 _ENVS_DIR = Path(__file__).resolve().parents[2] / "envs"
 
 ORCHESTRATOR_IMAGE = (
@@ -32,6 +33,7 @@ ORCHESTRATOR_IMAGE = (
         "pydantic>=2.6",
     )
     .add_local_python_source("internal_ax")
+    .add_local_dir(str(_ENVS_DIR), "/opt/envs")
 )
 
 
@@ -96,6 +98,4 @@ AGENT_IMAGE = (
         f"cat > /root/.codex/config.toml <<'EOF'\n{_CODEX_CONFIG}\nEOF",
         "codex plugin marketplace add langfuse/codex-observability-plugin",
     )
-    # Starter workspaces referenced by dataset items via metadata.env_folder.
-    .add_local_dir(str(_ENVS_DIR), "/opt/envs", copy=True)
 )

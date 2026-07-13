@@ -82,6 +82,9 @@ def orchestrate(payload: dict) -> dict:
     ]
 
     results = list(run_unit.map(units))
+    for r in results:
+        if not r.get("ok"):
+            print("unit FAILED:", r)
     summary = {
         "run_name": run_name,
         "dataset": dataset_name,
