@@ -49,10 +49,12 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 "LANGFUSE_CODEX_TAGS": json.dumps(["internal-ax", run_name]),
             },
             setup_cmds=_CODEX_SETUP,
+            # < /dev/null: with an open (non-TTY) stdin pipe, codex exec prints
+            # "Reading additional input from stdin..." and blocks forever.
             agent_cmd=(
                 'codex exec "$PROMPT" --json --skip-git-repo-check '
                 "--dangerously-bypass-hook-trust --sandbox danger-full-access "
-                f"--output-last-message {_LAST_MESSAGE_PATH}"
+                f"--output-last-message {_LAST_MESSAGE_PATH} < /dev/null"
             ),
             collect_files=[_LAST_MESSAGE_PATH],
             env_folder=item.env_folder,
