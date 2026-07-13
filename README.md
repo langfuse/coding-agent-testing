@@ -180,9 +180,10 @@ Optionally set a default **payload** (JSON) to narrow the matrix or name the run
 ```
 
 > Langfuse's remote-run webhook sends **no signature/auth header** and **no
-> `runName`** — hence the `?token=` gate and the auto-generated run name. It also
-> **aborts after 20s**, so the endpoint only ACKs and spawns; the experiment runs
-> asynchronously.
+> `runName`** — hence the `?token=` gate and the auto-generated run name. The
+> custom config blob arrives as a JSON **string** inside `payload`, which
+> `orchestrate` parses defensively. Langfuse also **aborts after 20s**, so the
+> endpoint only ACKs and spawns; the experiment runs asynchronously.
 
 Now click **Run** in the Langfuse dataset UI. Or trigger it yourself:
 
@@ -192,7 +193,12 @@ python scripts/trigger_webhook.py \
   --dataset code-agent-dataset
 ```
 
-Results appear under the dataset's **Runs** in Langfuse, one trace per item×agent.
+Results appear under the dataset's **Runs** tab: **one experiment run per
+agent**, named `<base run name>-<config key>` (e.g. `baseline-2026-06-claude-code`
+and `baseline-2026-06-codex`), each carrying `{agent, harness}` run metadata —
+so agents stay directly comparable side by side. Linking uses the low-level
+`dataset_run_items.create` API (not `run_experiment`, which assumes the task
+executes in-process; our traces come from plugins inside the sandboxes).
 
 ---
 
@@ -229,6 +235,8 @@ queries poll for up to ~30s after the agent exits.
 2. **Remote-run webhook** has **no HMAC/signature** and omits **`runName`** — we
    work around both, but a signature + `runName` would let services authenticate
    the call and adopt the run name Langfuse shows in the UI.
+   Also: the custom config blob is delivered as a JSON **string** inside
+   `payload` rather than as a JSON object — every consumer has to double-parse.
 3. Claude Code's `--bare` flag (slated to become the `-p` default at some point)
    skips hooks/plugins; if a CLI update changes the default, traces silently
    stop. Pin or watch the CLI version in `images.py`.
