@@ -133,7 +133,17 @@ project never requires re-entering the agent API keys:
 
 - `internal-ax` (base, one-time): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - `internal-ax-project`: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
-  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`
+  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`, and optionally `SANDBOX_LANGFUSE_*`
+
+**Two Langfuse projects** (recommended): the harness project holds the dataset
++ the execution traces; a separate scratch project is what agents see as
+`LANGFUSE_*` inside the sandbox, so datasets/prompts/test traces that tasks
+tell agents to create don't pollute the harness project. Configure it via
+`SANDBOX_LANGFUSE_*` in `.env` — the runner passes it to the sandbox as plain
+`LANGFUSE_*`, while the observability plugins get the harness project via
+prefixed vars (`LANGFUSE_CODEX_*` natively; `CC_LANGFUSE_*` via an env remap
+in the baked hook command, since the Claude hook checks plain vars first).
+Unset = agents share the harness project (previous behavior).
 
 **a. Base secret** (once):
 

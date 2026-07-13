@@ -27,12 +27,23 @@ fi
 
 MODAL="${MODAL_BIN:-.venv/bin/modal}"
 
-"$MODAL" secret create internal-ax-project \
-  LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
-  LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY" \
-  LANGFUSE_BASE_URL="$LANGFUSE_BASE_URL" \
-  WEBHOOK_SECRET="$WEBHOOK_SECRET" \
-  --force
+SECRET_ARGS=(
+  LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY"
+  LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY"
+  LANGFUSE_BASE_URL="$LANGFUSE_BASE_URL"
+  WEBHOOK_SECRET="$WEBHOOK_SECRET"
+)
+# Optional separate scratch project the agents get as their LANGFUSE_* env.
+if [ -n "${SANDBOX_LANGFUSE_PUBLIC_KEY:-}" ]; then
+  SECRET_ARGS+=(
+    SANDBOX_LANGFUSE_PUBLIC_KEY="$SANDBOX_LANGFUSE_PUBLIC_KEY"
+    SANDBOX_LANGFUSE_SECRET_KEY="${SANDBOX_LANGFUSE_SECRET_KEY:?set in .env}"
+    SANDBOX_LANGFUSE_BASE_URL="${SANDBOX_LANGFUSE_BASE_URL:-$LANGFUSE_BASE_URL}"
+  )
+  echo "Including sandbox Langfuse project keys (agents get these as LANGFUSE_*)"
+fi
+
+"$MODAL" secret create internal-ax-project "${SECRET_ARGS[@]}" --force
 
 "$MODAL" deploy -m internal_ax.app
 

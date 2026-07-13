@@ -2,11 +2,33 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import modal
+
+_LF_KEYS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
+
+
+def _langfuse_env() -> dict[str, str]:
+    """Two-project credential split for the sandbox.
+
+    - Plain LANGFUSE_* (what agent task code sees): the SANDBOX_LANGFUSE_*
+      scratch project if configured, else the harness project. Keeps the
+      agents' own datasets/prompts/test traces out of the harness project.
+    - CC_LANGFUSE_* / LANGFUSE_CODEX_*: always the harness project — the
+      observability plugins read these (Codex natively prefers the prefix;
+      the Claude hook command remaps them in images.py) so execution traces
+      keep landing where the dataset runs live.
+    """
+    harness = {k: os.environ[k] for k in _LF_KEYS if k in os.environ}
+    env = {k: os.environ.get(f"SANDBOX_{k}", v) for k, v in harness.items()}
+    for k, v in harness.items():
+        env[f"CC_{k}"] = v
+        env[k.replace("LANGFUSE_", "LANGFUSE_CODEX_")] = v
+    return env
 
 from internal_ax.config import MODAL_SECRET_NAMES, SANDBOX_TIMEOUT_S
 from internal_ax.images import AGENT_IMAGE
@@ -69,7 +91,8 @@ def run_agent(
 
     secrets = [
         *[modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES],
-        modal.Secret.from_dict({**env, "PROMPT": prompt}),
+        # Last wins: the credential split, then per-runner overrides.
+        modal.Secret.from_dict({**_langfuse_env(), **env, "PROMPT": prompt}),
     ]
     sb = modal.Sandbox.create(
         app=app,

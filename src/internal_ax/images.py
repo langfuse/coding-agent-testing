@@ -14,6 +14,7 @@ Two images:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import modal
@@ -47,20 +48,31 @@ ORCHESTRATOR_IMAGE = (
 # Hook config baked into the agent image. Mirrors the plugin's own hooks.json
 # (Stop + SessionEnd are the only hooks it registers) but points at the baked
 # clone, so headless `claude -p` runs trace without a marketplace install.
-_CLAUDE_SETTINGS = r"""
-{
-  "hooks": {
-    "Stop": [
-      {"hooks": [{"type": "command",
-        "command": "if command -v uv >/dev/null 2>&1; then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"}]}
-    ],
-    "SessionEnd": [
-      {"hooks": [{"type": "command",
-        "command": "if command -v uv >/dev/null 2>&1; then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"}]}
-    ]
-  }
-}
-"""
+#
+# The env remap at the start of the command routes the PLUGIN's upload at the
+# harness Langfuse project (CC_LANGFUSE_*) even when the agent-visible plain
+# LANGFUSE_* vars point at the separate sandbox project. Needed because the
+# hook script checks plain vars BEFORE the CC_-prefixed ones (unlike the Codex
+# plugin, where the prefix takes precedence natively). Falls back to plain
+# vars when CC_* is unset.
+_CLAUDE_HOOK_CMD = (
+    'export LANGFUSE_PUBLIC_KEY="${CC_LANGFUSE_PUBLIC_KEY:-$LANGFUSE_PUBLIC_KEY}" '
+    'LANGFUSE_SECRET_KEY="${CC_LANGFUSE_SECRET_KEY:-$LANGFUSE_SECRET_KEY}" '
+    'LANGFUSE_BASE_URL="${CC_LANGFUSE_BASE_URL:-$LANGFUSE_BASE_URL}"; '
+    "if command -v uv >/dev/null 2>&1; "
+    "then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; "
+    "else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"
+)
+
+_CLAUDE_SETTINGS = json.dumps(
+    {
+        "hooks": {
+            "Stop": [{"hooks": [{"type": "command", "command": _CLAUDE_HOOK_CMD}]}],
+            "SessionEnd": [{"hooks": [{"type": "command", "command": _CLAUDE_HOOK_CMD}]}],
+        }
+    },
+    indent=2,
+)
 
 # Codex config: enable plugin hooks + the Langfuse tracing plugin, and prefer
 # API-key auth (the sandbox has OPENAI_API_KEY, no ChatGPT login).
