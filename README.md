@@ -243,6 +243,10 @@ queries poll for up to ~30s after the agent exits.
 
 ## Ops notes
 
+- The Langfuse observability plugins are **pinned by commit SHA** in
+  `images.py` (`CLAUDE_PLUGIN_REV`, `CODEX_PLUGIN_REV`). To pull a newer
+  plugin, bump the SHA and redeploy — the changed layer forces a fresh
+  install. Unpinned clones would silently freeze at build-time HEAD.
 - Modal scales `run_unit` to zero between runs — you pay per second of execution
   only. Cap fan-out with `max_containers` on `run_unit` to bound concurrency/spend.
 - Per-run sandbox budget is `SANDBOX_TIMEOUT_S` (default 900s).
