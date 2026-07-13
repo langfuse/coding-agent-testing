@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import traceback
 
 from internal_ax import langfuse_helpers as lf
 from internal_ax import scoring
@@ -85,4 +86,5 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         return RunResult(config.key, item.id, ok=ok, trace_ids=trace_ids, scores=scores, error=err)
     except Exception as e:  # noqa: BLE001
         lf.flush()
-        return RunResult(config.key, item.id, ok=False, error=repr(e))
+        tb = traceback.format_exc(limit=8)
+        return RunResult(config.key, item.id, ok=False, error=f"{e!r}\n{tb[-1500:]}")
