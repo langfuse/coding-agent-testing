@@ -29,7 +29,7 @@ _ENVS_DIR = Path(__file__).resolve().parents[2] / "envs"
 # to pull a newer plugin — a changed SHA invalidates the image layer cache, so
 # the update is explicit and reproducible (an unpinned clone would silently
 # freeze at whatever HEAD was when the layer was first built).
-CLAUDE_PLUGIN_REV = "9ad0076a7a24e8673ac6e7ac6f7b658b18826bb6"  # 2026-07-07
+CLAUDE_PLUGIN_REV = "d654237fdf3fbbb3013c828280e9d4d80537f9a2"  # 2026-07-13, deterministic trace ids (PR #23)
 CODEX_PLUGIN_REV = "6882ab7e117409265e233124ec2008fed8fc227c"  # 2026-06-04
 
 ORCHESTRATOR_IMAGE = (

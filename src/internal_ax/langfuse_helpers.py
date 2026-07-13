@@ -11,6 +11,7 @@ we link it after the fact).
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -125,6 +126,32 @@ def score_trace(*, trace_id: str, name: str, value: float | str, comment: str | 
 # trace(s) it emitted and link them. Codex lets us tag traces with metadata; for
 # Claude Code we dictate the CLI session id (--session-id) and the plugin sets it
 # as the Langfuse session_id.
+
+
+def deterministic_trace_id(seed: str) -> str:
+    """The seeded trace id formula shared with the observability plugins:
+    Langfuse.create_trace_id(seed) == sha256(seed).hexdigest()[:32]."""
+    try:
+        from langfuse import Langfuse
+
+        tid = Langfuse.create_trace_id(seed=seed)
+        if isinstance(tid, str) and len(tid) == 32:
+            return tid
+    except Exception:  # noqa: BLE001 — fall through to the equivalent manual formula
+        pass
+    return hashlib.sha256(seed.encode()).hexdigest()[:32]
+
+
+def wait_for_trace(trace_id: str, *, retries: int = 10, delay_s: float = 3.0) -> bool:
+    """Poll until a known trace id is queryable (plugin export is async)."""
+    api = client().api
+    for _ in range(retries):
+        try:
+            api.trace.get(trace_id)
+            return True
+        except Exception:  # noqa: BLE001 — not-found or transient; retry either way
+            time.sleep(delay_s)
+    return False
 
 
 def _utc(t: dt.datetime) -> dt.datetime:

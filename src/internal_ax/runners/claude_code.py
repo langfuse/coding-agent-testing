@@ -40,6 +40,10 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
     session_id = str(uuid.uuid4())  # we choose it; the plugin reports it to Langfuse
     # Per-cell user_id so the fallback lookup can't match another item's trace.
     user_id = f"internal-ax-{run_name}-{item.id}"[:128]
+    # The plugin (>= PR #23) derives trace ids from CC_LANGFUSE_TRACE_SEED as
+    # create_trace_id(f"{seed}:{turn}"); `claude -p` is exactly one turn, so the
+    # trace id is known before the agent even starts — no discovery queries.
+    trace_id = lf.deterministic_trace_id(f"{session_id}:1")
 
     try:
         res = run_agent(
@@ -50,6 +54,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 "LANGFUSE_USER_ID": user_id,
                 "IS_SANDBOX": "1",
                 "CLAUDE_SESSION_ID": session_id,
+                "CC_LANGFUSE_TRACE_SEED": session_id,
             },
             setup_cmds=[],
             agent_cmd=(
@@ -61,7 +66,11 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         output = _parse_result(res.stdout)
         transcript = res.stdout + "\n" + res.stderr
 
-        trace_ids = lf.find_traces_by_session_id(session_id, since=started)
+        # Primary: the precomputed id — just confirm the plugin's upload landed.
+        # Fallbacks cover a stale plugin (no seed support) or a multi-turn session.
+        trace_ids = [trace_id] if lf.wait_for_trace(trace_id) else []
+        if not trace_ids:
+            trace_ids = lf.find_traces_by_session_id(session_id, since=started, retries=3)
         if not trace_ids:
             trace_ids = lf.find_traces_by_user_id(user_id, since=started, retries=3)
         scores = scoring.score_agent_run(
