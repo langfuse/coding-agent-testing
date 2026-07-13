@@ -1,0 +1,26 @@
+[
+  {
+    "question": "How long is a password reset link valid?",
+    "reference_answer": "30 minutes."
+  },
+  {
+    "question": "What happens when two devices edit the same file while offline?",
+    "reference_answer": "Both copies are kept; the newer file keeps the original name and the older one is renamed with a '(conflict)' suffix."
+  },
+  {
+    "question": "How much storage does the Pro plan include?",
+    "reference_answer": "2 TB."
+  },
+  {
+    "question": "Does selective sync free up cloud storage?",
+    "reference_answer": "No — it only frees local disk space; excluded folders stay in the cloud."
+  },
+  {
+    "question": "Which plan includes SSO?",
+    "reference_answer": "The Team plan ($15/user/month)."
+  },
+  {
+    "question": "Can I sync more than 2 devices on the free plan?",
+    "reference_answer": "No, the free plan is limited to 2 devices; Pro and Team allow unlimited devices."
+  }
+]
