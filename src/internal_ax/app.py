@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 
+import fastapi
 import modal
 
 from internal_ax.config import (
@@ -98,22 +99,20 @@ def orchestrate(payload: dict) -> dict:
 
 @app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=60)
 @modal.fastapi_endpoint(method="POST")
-async def webhook(request) -> dict:
+async def webhook(request: fastapi.Request) -> dict:
     """Langfuse remote-run entrypoint.
 
     Langfuse POSTs {projectId, datasetId, datasetName, payload} with NO signature,
     so we gate on a shared ?token= secret. We accept and return immediately, then
     do the work asynchronously (Langfuse aborts the request after 20s).
     """
-    from fastapi.responses import JSONResponse
-
     token = request.query_params.get("token")
     if not token or token != os.environ.get("WEBHOOK_SECRET"):
-        return JSONResponse({"error": "unauthorized"}, status_code=401)
+        raise fastapi.HTTPException(status_code=401, detail="unauthorized")
 
     payload = await request.json()
     if not payload.get("datasetName"):
-        return JSONResponse({"error": "missing datasetName"}, status_code=400)
+        raise fastapi.HTTPException(status_code=400, detail="missing datasetName")
 
     call = orchestrate.spawn(payload)
     return {"status": "accepted", "function_call_id": call.object_id}
