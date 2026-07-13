@@ -15,6 +15,7 @@ Deploy:  modal deploy -m internal_ax.app
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 
 import fastapi
@@ -61,12 +62,20 @@ def run_unit(unit: dict) -> dict:
 def orchestrate(payload: dict) -> dict:
     dataset_name = payload["datasetName"]
     cfg = payload.get("payload") or {}  # the user's editable config blob from Langfuse
+    if isinstance(cfg, str):  # the Langfuse UI delivers the config as a JSON string
+        try:
+            cfg = json.loads(cfg) or {}
+        except json.JSONDecodeError:
+            print(f"ignoring unparseable payload config: {cfg!r}")
+            cfg = {}
 
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
-    run_name = cfg.get("run_name") or f"{dataset_name}-{ts}"
+    base_run_name = cfg.get("run_name") or f"{dataset_name}-{ts}"
     run_configs = select_run_configs(cfg.get("run_configs"))
 
     items = fetch_dataset_items(dataset_name)
+    # One Langfuse experiment (dataset run) PER agent: "<base>-<config key>",
+    # so Claude Code and Codex results stay comparable side by side in the UI.
     units = [
         {
             "item": {
@@ -76,7 +85,7 @@ def orchestrate(payload: dict) -> dict:
                 "metadata": it.metadata,
             },
             "config_key": rc.key,
-            "run_name": run_name,
+            "run_name": f"{base_run_name}-{rc.key}",
         }
         for it in items
         for rc in run_configs
@@ -87,7 +96,8 @@ def orchestrate(payload: dict) -> dict:
         if not r.get("ok"):
             print("unit FAILED:", r)
     summary = {
-        "run_name": run_name,
+        "run_name": base_run_name,
+        "runs": sorted({u["run_name"] for u in units}),
         "dataset": dataset_name,
         "units": len(units),
         "ok": sum(1 for r in results if r.get("ok")),

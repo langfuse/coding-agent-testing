@@ -69,7 +69,13 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         for tid in trace_ids:
             for name, value in scores.items():
                 lf.score_trace(trace_id=tid, name=name, value=value)
-            lf.link_trace_to_run(run_name=run_name, dataset_item_id=item.id, trace_id=tid)
+            lf.link_trace_to_run(
+                run_name=run_name,
+                dataset_item_id=item.id,
+                trace_id=tid,
+                run_description=f"{config.label} via internal-ax on Modal",
+                metadata={"agent": config.key, "harness": "internal-ax"},
+            )
         lf.flush()
 
         ok = bool(trace_ids) and res.returncode == 0
