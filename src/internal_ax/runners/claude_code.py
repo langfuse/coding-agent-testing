@@ -45,6 +45,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
             app,
             prompt=item.prompt,
             env={
+                "TRACE_TO_LANGFUSE": "true",  # repo hook ignores it; docs' manual hook requires it
                 "LANGFUSE_USER_ID": user_id,
                 "IS_SANDBOX": "1",
                 "CLAUDE_SESSION_ID": session_id,

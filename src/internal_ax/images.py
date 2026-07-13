@@ -25,6 +25,13 @@ import modal
 # add_local_dir sources don't exist.
 _ENVS_DIR = Path(__file__).resolve().parents[2] / "envs"
 
+# Pinned revisions of the official Langfuse observability plugins. Bump these
+# to pull a newer plugin — a changed SHA invalidates the image layer cache, so
+# the update is explicit and reproducible (an unpinned clone would silently
+# freeze at whatever HEAD was when the layer was first built).
+CLAUDE_PLUGIN_REV = "9ad0076a7a24e8673ac6e7ac6f7b658b18826bb6"  # 2026-07-07
+CODEX_PLUGIN_REV = "6882ab7e117409265e233124ec2008fed8fc227c"  # 2026-06-04
+
 ORCHESTRATOR_IMAGE = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install(
@@ -87,15 +94,19 @@ AGENT_IMAGE = (
     # Claude Code: bake the plugin clone, register its hooks globally, and mark
     # onboarding done so headless runs don't stall on first-run prompts.
     .run_commands(
-        "git clone --depth 1 https://github.com/langfuse/Claude-Observability-Plugin /opt/claude-langfuse-plugin",
+        "git clone https://github.com/langfuse/Claude-Observability-Plugin /opt/claude-langfuse-plugin"
+        f" && git -C /opt/claude-langfuse-plugin checkout {CLAUDE_PLUGIN_REV}",
         "mkdir -p /root/.claude",
         f"cat > /root/.claude/settings.json <<'EOF'\n{_CLAUDE_SETTINGS}\nEOF",
         'echo \'{"hasCompletedOnboarding": true}\' > /root/.claude.json',
     )
     # Codex: official marketplace install of the Langfuse plugin + config.
+    # marketplace add always installs HEAD; the echoed rev is a cache-buster so
+    # bumping CODEX_PLUGIN_REV forces a fresh install of the current plugin.
     .run_commands(
         "mkdir -p /root/.codex",
         f"cat > /root/.codex/config.toml <<'EOF'\n{_CODEX_CONFIG}\nEOF",
-        "codex plugin marketplace add langfuse/codex-observability-plugin",
+        f"echo 'codex plugin rev {CODEX_PLUGIN_REV}'"
+        " && codex plugin marketplace add langfuse/codex-observability-plugin",
     )
 )
