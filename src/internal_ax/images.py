@@ -14,7 +14,15 @@ Two images:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import modal
+
+# Starter workspaces for dataset items (metadata.env_folder). Baked into
+# AGENT_IMAGE at /opt/envs/<name> and copied into the sandbox's /workspace by
+# the runner, so agents start inside a realistic project. copy=True: contents
+# become an image layer (sandbox-safe; rebuilds only when a folder changes).
+_ENVS_DIR = Path(__file__).resolve().parents[2] / "envs"
 
 ORCHESTRATOR_IMAGE = (
     modal.Image.debian_slim(python_version="3.11")
@@ -88,4 +96,6 @@ AGENT_IMAGE = (
         f"cat > /root/.codex/config.toml <<'EOF'\n{_CODEX_CONFIG}\nEOF",
         "codex plugin marketplace add langfuse/codex-observability-plugin",
     )
+    # Starter workspaces referenced by dataset items via metadata.env_folder.
+    .add_local_dir(str(_ENVS_DIR), "/opt/envs", copy=True)
 )

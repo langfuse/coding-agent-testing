@@ -55,6 +55,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 f"--output-last-message {_LAST_MESSAGE_PATH}"
             ),
             collect_files=[_LAST_MESSAGE_PATH],
+            env_folder=item.env_folder,
         )
         output = res.files.get(_LAST_MESSAGE_PATH, "") or res.stdout
         transcript = res.stdout + "\n" + res.stderr

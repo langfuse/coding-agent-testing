@@ -52,6 +52,17 @@ class DatasetItem:
         return []
 
     @property
+    def env_folder(self) -> str | None:
+        """Name of a starter workspace under this repo's ``envs/`` directory.
+
+        Set via ``metadata.env_folder``. The folder is baked into the agent
+        image at ``/opt/envs/<name>`` and copied into the sandbox's /workspace
+        before the agent starts, so the prompt can reference "this application".
+        """
+        name = self.metadata.get("env_folder")
+        return str(name) if name else None
+
+    @property
     def expected_tool(self) -> str | None:
         """The tool we expect to be discovered/recommended/used.
 

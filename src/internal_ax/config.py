@@ -52,3 +52,12 @@ SANDBOX_TIMEOUT_S = int(os.environ.get("SANDBOX_TIMEOUT_S", "900"))
 
 # Name of the Modal Secret holding the env vars in .env.example.
 MODAL_SECRET_NAME = os.environ.get("MODAL_SECRET_NAME", "internal-ax")
+
+# Second Modal Secret layered ON TOP of MODAL_SECRET_NAME (later secrets win on
+# key conflicts). Holds the Langfuse project keys + WEBHOOK_SECRET, so pointing
+# the service at a different Langfuse project never requires re-entering the
+# Anthropic/OpenAI keys stored in the base secret.
+MODAL_PROJECT_SECRET_NAME = os.environ.get("MODAL_PROJECT_SECRET_NAME", "internal-ax-project")
+
+# Attach in this order everywhere env vars are needed.
+MODAL_SECRET_NAMES = [MODAL_SECRET_NAME, MODAL_PROJECT_SECRET_NAME]

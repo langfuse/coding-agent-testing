@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 import modal
 
-from internal_ax.config import MODAL_SECRET_NAME, SANDBOX_TIMEOUT_S
+from internal_ax.config import MODAL_SECRET_NAMES, SANDBOX_TIMEOUT_S
 from internal_ax.images import AGENT_IMAGE
+
+# Env folder names come from dataset item metadata (user-editable in the
+# Langfuse UI) and are interpolated into a shell command — keep them strict.
+_ENV_FOLDER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
 @dataclass
@@ -26,15 +31,28 @@ def run_agent(
     setup_cmds: list[str],
     agent_cmd: str,
     collect_files: list[str] | None = None,
+    env_folder: str | None = None,
 ) -> SandboxResult:
     """Spin up an isolated sandbox, run setup then the agent command, tear down.
 
     The prompt is passed as the ``$PROMPT`` env var and referenced quoted in the
     command, so its contents are never interpolated into the shell.
     ``collect_files`` are read back (empty string if missing) before teardown.
+    ``env_folder`` names a starter workspace baked into AGENT_IMAGE at
+    ``/opt/envs/<name>``; its contents are copied into /workspace so the agent
+    starts inside a realistic project instead of an empty directory.
     """
+    workspace_cmds = ["mkdir -p /workspace"]
+    if env_folder:
+        if not _ENV_FOLDER_RE.fullmatch(env_folder):
+            raise ValueError(f"invalid env_folder name: {env_folder!r}")
+        workspace_cmds.append(
+            f"test -d /opt/envs/{env_folder} || {{ echo 'env folder not baked into image: {env_folder}' >&2; exit 1; }}"
+        )
+        workspace_cmds.append(f"cp -a /opt/envs/{env_folder}/. /workspace/")
+
     secrets = [
-        modal.Secret.from_name(MODAL_SECRET_NAME),
+        *[modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES],
         modal.Secret.from_dict({**env, "PROMPT": prompt}),
     ]
     sb = modal.Sandbox.create(
@@ -44,7 +62,7 @@ def run_agent(
         timeout=SANDBOX_TIMEOUT_S,
     )
     try:
-        for cmd in ["mkdir -p /workspace", *setup_cmds]:
+        for cmd in [*workspace_cmds, *setup_cmds]:
             p = sb.exec("bash", "-lc", cmd)
             p.wait()
             if p.returncode != 0:

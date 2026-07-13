@@ -56,18 +56,39 @@ trace ids).
 ```
 src/internal_ax/
   app.py              Modal app: webhook + orchestrate + run_unit + smoke_test entrypoint
-  images.py           Modal images (orchestrator; agent sandbox w/ CLIs + plugins)
+  images.py           Modal images (orchestrator; agent sandbox w/ CLIs + plugins + envs/)
   config.py           settings + the run-config matrix (claude-code, codex)
   langfuse_helpers.py dataset fetch, trace↔run linking, correlation queries
   scoring.py          task_completed + tool-readiness heuristics
   runners/
     claude_code.py    Sandbox + claude -p + Claude-Observability-Plugin
     codex.py          Sandbox + codex exec + codex-observability-plugin
-    _sandbox.py       shared sandbox helper
+    _sandbox.py       shared sandbox helper (incl. env-folder materialization)
+envs/
+  <name>/             starter workspaces; dataset items reference them via
+                      metadata.env_folder and the folder is copied into the
+                      sandbox's /workspace before the agent starts
 scripts/
-  seed_dataset.py     create the "code-agent-readiness" dataset in Langfuse
+  seed_dataset.py     create the "code-agent-dataset" dataset in Langfuse
+  bootstrap_modal.sh  create the project secret, deploy, print the webhook URL
   trigger_webhook.py  POST a Langfuse-shaped payload at the deployed webhook
 ```
+
+### Env folders (realistic starting workspaces)
+
+Some tasks need more than a prompt — "instrument *this application* with
+Langfuse" only makes sense if there is an application. Those items set
+`metadata.env_folder` to the name of a directory under `envs/`:
+
+1. `envs/` is baked into the agent image at `/opt/envs` (`copy=True`, so a
+   changed folder just triggers an image rebuild on the next deploy).
+2. When a dataset item carries `metadata.env_folder`, the runner copies
+   `/opt/envs/<name>/.` into the sandbox's `/workspace` before launching the
+   agent — the agent wakes up inside the project.
+3. Items without `env_folder` start in an empty `/workspace` as before.
+
+Folder names are validated (`[A-Za-z0-9][A-Za-z0-9_-]*`) since metadata is
+editable in the Langfuse UI and ends up in a shell command.
 
 ---
 
@@ -89,16 +110,17 @@ cp .env.example .env        # fill in keys
 
 ```bash
 set -a && source .env && set +a
-python scripts/seed_dataset.py     # creates dataset "code-agent-readiness"
+python scripts/seed_dataset.py     # creates dataset "code-agent-dataset"
 ```
 
-Two deliberately simple starter tasks (FizzBuzz, word count) to validate the
-plumbing. Item shape:
+One trivial plumbing check (FizzBuzz) plus one realistic branded task
+(instrument `envs/flask-openai-chat` with Langfuse). Item shape:
 
 ```json
 { "input":            {"prompt": "the task handed verbatim to the agent"},
   "expected_output":  {"contains": ["substrings", "the answer must include"],
-                       "tool": "optional-tool-to-score-discovery-of"} }
+                       "tool": "optional-tool-to-score-discovery-of"},
+  "metadata":         {"env_folder": "optional-starter-workspace-under-envs/"} }
 ```
 
 Add more sophisticated items in the Langfuse UI once the setup works — no code
@@ -106,34 +128,36 @@ change needed as long as they follow this shape.
 
 ## 3. Deploy to Modal
 
-**a. Create the secret** holding everything from `.env`:
+Two layered secrets (later wins on key conflicts), so switching the Langfuse
+project never requires re-entering the agent API keys:
+
+- `internal-ax` (base, one-time): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+- `internal-ax-project`: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
+  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`
+
+**a. Base secret** (once):
 
 ```bash
-modal secret create internal-ax \
-  LANGFUSE_PUBLIC_KEY=pk-lf-... \
-  LANGFUSE_SECRET_KEY=sk-lf-... \
-  LANGFUSE_BASE_URL=https://cloud.langfuse.com \
-  ANTHROPIC_API_KEY=sk-ant-... \
-  OPENAI_API_KEY=sk-... \
-  WEBHOOK_SECRET="$(openssl rand -hex 24)"
+modal secret create internal-ax ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-...
 ```
 
-**b. Deploy** (builds both images; the agent image installs Node 22, the Claude
-Code + Codex CLIs, `uv`, and both Langfuse observability plugins):
+**b. Project secret + deploy + webhook URL** — one command, reads `.env`,
+generates and persists `WEBHOOK_SECRET` if missing:
 
 ```bash
-modal deploy -m internal_ax.app
+bash scripts/bootstrap_modal.sh
 ```
 
-Modal prints the web endpoint URL, e.g.
-`https://<workspace>--internal-ax-webhook.modal.run`.
+It prints the exact webhook URL to paste into Langfuse
+(`https://<workspace>--internal-ax-webhook.modal.run?token=...`). Re-run it any
+time you point at a different Langfuse project.
 
 **c. Smoke-test the full path synchronously** (no webhook involved — failures
 surface in your terminal):
 
 ```bash
-modal run -m internal_ax.app --dataset code-agent-readiness --run-configs claude-code
-modal run -m internal_ax.app --dataset code-agent-readiness --run-configs codex
+modal run -m internal_ax.app --dataset code-agent-dataset --run-configs claude-code
+modal run -m internal_ax.app --dataset code-agent-dataset --run-configs codex
 ```
 
 Then check Langfuse: the dataset's **Runs** tab should show one run with a
@@ -165,7 +189,7 @@ Now click **Run** in the Langfuse dataset UI. Or trigger it yourself:
 ```bash
 python scripts/trigger_webhook.py \
   --url "https://<workspace>--internal-ax-webhook.modal.run?token=$WEBHOOK_SECRET" \
-  --dataset code-agent-readiness
+  --dataset code-agent-dataset
 ```
 
 Results appear under the dataset's **Runs** in Langfuse, one trace per item×agent.

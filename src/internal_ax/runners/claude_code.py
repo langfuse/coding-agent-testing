@@ -54,6 +54,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
                 'claude -p "$PROMPT" --session-id "$CLAUDE_SESSION_ID" '
                 "--output-format json --dangerously-skip-permissions"
             ),
+            env_folder=item.env_folder,
         )
         output = _parse_result(res.stdout)
         transcript = res.stdout + "\n" + res.stderr

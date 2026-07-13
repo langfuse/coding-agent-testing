@@ -20,7 +20,7 @@ import os
 import modal
 
 from internal_ax.config import (
-    MODAL_SECRET_NAME,
+    MODAL_SECRET_NAMES,
     RunType,
     run_config_by_key,
     select_run_configs,
@@ -30,7 +30,7 @@ from internal_ax.langfuse_helpers import DatasetItem, fetch_dataset_items
 
 app = modal.App("internal-ax")
 
-_SECRET = modal.Secret.from_name(MODAL_SECRET_NAME)
+_SECRETS = [modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES]
 
 
 def _dispatch(item: DatasetItem, config, run_name: str):
@@ -47,7 +47,7 @@ def _dispatch(item: DatasetItem, config, run_name: str):
     raise ValueError(f"unknown run type: {rt}")
 
 
-@app.function(image=ORCHESTRATOR_IMAGE, secrets=[_SECRET], timeout=3600)
+@app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=3600)
 def run_unit(unit: dict) -> dict:
     item = DatasetItem(**unit["item"])
     config = run_config_by_key(unit["config_key"])
@@ -56,7 +56,7 @@ def run_unit(unit: dict) -> dict:
     return _dispatch(item, config, unit["run_name"]).as_dict()
 
 
-@app.function(image=ORCHESTRATOR_IMAGE, secrets=[_SECRET], timeout=3600)
+@app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=3600)
 def orchestrate(payload: dict) -> dict:
     dataset_name = payload["datasetName"]
     cfg = payload.get("payload") or {}  # the user's editable config blob from Langfuse
@@ -93,7 +93,7 @@ def orchestrate(payload: dict) -> dict:
     return summary
 
 
-@app.function(image=ORCHESTRATOR_IMAGE, secrets=[_SECRET], timeout=60)
+@app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=60)
 @modal.fastapi_endpoint(method="POST")
 async def webhook(request) -> dict:
     """Langfuse remote-run entrypoint.
@@ -117,10 +117,10 @@ async def webhook(request) -> dict:
 
 
 @app.local_entrypoint()
-def smoke_test(dataset: str = "code-agent-readiness", run_configs: str = "", run_name: str = ""):
+def smoke_test(dataset: str = "code-agent-dataset", run_configs: str = "", run_name: str = ""):
     """Validate the full agent path without the webhook:
 
-        modal run -m internal_ax.app --dataset code-agent-readiness
+        modal run -m internal_ax.app --dataset code-agent-dataset
         modal run -m internal_ax.app --run-configs claude-code
 
     Runs synchronously and prints the summary, so failures surface immediately.
