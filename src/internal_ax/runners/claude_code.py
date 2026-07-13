@@ -57,7 +57,7 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
             setup_cmds=[],
             agent_cmd=(
                 'claude -p "$PROMPT" --session-id "$CLAUDE_SESSION_ID" '
-                "--output-format json --dangerously-skip-permissions"
+                "--output-format json --dangerously-skip-permissions < /dev/null"
             ),
             env_folder=item.env_folder,
         )

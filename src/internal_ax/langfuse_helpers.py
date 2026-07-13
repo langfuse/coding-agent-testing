@@ -139,7 +139,7 @@ def deterministic_trace_id(seed: str) -> str:
     return hashlib.sha256(seed.encode()).hexdigest()[:32]
 
 
-def wait_for_trace(trace_id: str, *, retries: int = 10, delay_s: float = 3.0) -> bool:
+def wait_for_trace(trace_id: str, *, retries: int = 30, delay_s: float = 3.0) -> bool:
     """Poll until a known trace id is queryable (plugin export is async)."""
     api = client().api
     for _ in range(retries):
