@@ -169,7 +169,11 @@ def find_traces_by_metadata(
 ) -> list[str]:
     """Used for Codex: query traces by an injected metadata key/value."""
     api = client().api
-    filt = json.dumps([{"column": "metadata", "operator": "=", "key": key, "value": value}])
+    # The filter union is discriminated on "type"; metadata key lookups are
+    # "stringObject" filters — omitting type yields a 400 invalid_union.
+    filt = json.dumps(
+        [{"type": "stringObject", "column": "metadata", "operator": "=", "key": key, "value": value}]
+    )
     for _ in range(retries):
         resp = api.trace.list(filter=filt, from_timestamp=_utc(since), limit=50)
         ids = [t.id for t in getattr(resp, "data", [])]
