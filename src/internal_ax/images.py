@@ -30,7 +30,7 @@ _ENVS_DIR = Path(__file__).resolve().parents[2] / "envs"
 # the update is explicit and reproducible (an unpinned clone would silently
 # freeze at whatever HEAD was when the layer was first built).
 CLAUDE_PLUGIN_REV = "d654237fdf3fbbb3013c828280e9d4d80537f9a2"  # 2026-07-13, deterministic trace ids (PR #23)
-CODEX_PLUGIN_REV = "6882ab7e117409265e233124ec2008fed8fc227c"  # 2026-06-04
+CODEX_PLUGIN_REV = "030d69d1f40679c8205202158807c79b56438cbd"  # 2026-07-13, deterministic trace ids (PR #24)
 
 ORCHESTRATOR_IMAGE = (
     modal.Image.debian_slim(python_version="3.11")

@@ -205,26 +205,34 @@ executes in-process; our traces come from plugins inside the sandboxes).
 ## How tracing + correlation works per agent
 
 Both agents are traced by their **official Langfuse observability plugins**,
-which run as agent hooks *inside the sandbox* and create their own traces. Each
-runner then finds those traces and links them to the dataset item + named run:
+which run as agent hooks *inside the sandbox* and create their own traces.
 
-- **Claude Code** — we generate a UUID and pass it as `--session-id`; the
-  plugin reports it as the Langfuse `session_id`, so the runner looks the trace
-  up deterministically by session id (with a per-run `LANGFUSE_USER_ID` as
-  fallback). Important: never add `--bare` to the command — it skips
-  hooks/plugins entirely, i.e. no trace. `IS_SANDBOX=1` is set so
-  `--dangerously-skip-permissions` works as root inside the container.
+**Trace ids are deterministic** — both plugins support a trace seed
+(Claude Code: `CC_LANGFUSE_TRACE_SEED`, PR #23; Codex:
+`LANGFUSE_CODEX_TRACE_SEED`, PR #24) from which the turn-N trace id derives as
+`create_trace_id(f"{seed}:{N}")` (= `sha256[:32]`). Each runner generates a
+per-cell seed, precomputes the id (headless runs are exactly one turn), and
+after the agent exits just confirms the trace exists (`GET /traces/{id}`,
+polling briefly since plugin export is async) before attaching scores and the
+dataset-run link. The old discovery queries (session id / user id for Claude
+Code, metadata filter for Codex) remain as fallbacks only.
+
+Per-agent headless notes:
+
+- **Claude Code** — we generate a UUID used as both `--session-id` and the
+  trace seed; the plugin reports it as the Langfuse `session_id`. Important:
+  never add `--bare` to the command — it skips hooks/plugins entirely, i.e. no
+  trace. `IS_SANDBOX=1` is set so `--dangerously-skip-permissions` works as
+  root inside the container.
 - **Codex** — the plugin honours `LANGFUSE_CODEX_METADATA` /
-  `LANGFUSE_CODEX_TAGS`, so we inject `{dataset_item_id, run_name}` and
-  correlate by metadata. `TRACE_TO_LANGFUSE=true` is the plugin's opt-in
-  switch. Headless requirements: `--dangerously-bypass-hook-trust` (Codex
-  silently skips untrusted plugin hooks otherwise) and
-  `--sandbox danger-full-access` (Codex's Landlock sandbox isn't available in
-  containers; the Modal sandbox is the isolation boundary). Auth is
+  `LANGFUSE_CODEX_TAGS`, so we also inject `{dataset_item_id, run_name}` as
+  trace metadata. `TRACE_TO_LANGFUSE=true` is the plugin's opt-in switch.
+  Headless requirements: `--dangerously-bypass-hook-trust` (Codex silently
+  skips untrusted plugin hooks otherwise), `--sandbox danger-full-access`
+  (Codex's Landlock sandbox isn't available in containers; the Modal sandbox is
+  the isolation boundary), stdin redirected from /dev/null, and the manual
+  post-exec hook invocation (see rough edge #4). Auth is
   `codex login --with-api-key` from `OPENAI_API_KEY`.
-
-Plugin export is asynchronous (it flushes on the Stop hook), so the correlation
-queries poll for up to ~30s after the agent exits.
 
 ## Known rough edges / product feedback (you're at Langfuse 🙂)
 
