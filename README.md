@@ -240,6 +240,16 @@ queries poll for up to ~30s after the agent exits.
 3. Claude Code's `--bare` flag (slated to become the `-p` default at some point)
    skips hooks/plugins; if a CLI update changes the default, traces silently
    stop. Pin or watch the CLI version in `images.py`.
+4. **Codex `exec` mode never fires plugin Stop hooks** (observed with
+   codex-cli 0.139.0, `plugin_hooks = true`, `--dangerously-bypass-hook-trust`;
+   the plugin cache materializes but no hook process ever starts — interactive
+   TUI only?). The runner works around it by piping
+   `{"transcript_path": ...}` into the plugin's `dist/index.mjs` manually after
+   `codex exec` finishes. Worth reporting to the codex-observability-plugin
+   team: headless `codex exec` is exactly the CI/benchmark use case.
+5. Two `codex exec` headless quirks: it blocks forever reading an open
+   non-TTY stdin (fixed with `< /dev/null`), and `trace.list` metadata filters
+   require the `type: "stringObject"` discriminator or return 400.
 
 ## Ops notes
 

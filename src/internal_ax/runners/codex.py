@@ -52,10 +52,17 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
             setup_cmds=_CODEX_SETUP,
             # < /dev/null: with an open (non-TTY) stdin pipe, codex exec prints
             # "Reading additional input from stdin..." and blocks forever.
+            # Codex (>= 0.139 exec mode) never fires plugin Stop hooks, so we
+            # invoke the Langfuse tracing hook manually over each rollout the
+            # session wrote; the plugin's sidecar files dedupe repeat uploads.
             agent_cmd=(
                 'codex exec "$PROMPT" --json --skip-git-repo-check '
                 "--dangerously-bypass-hook-trust --sandbox danger-full-access "
-                f"--output-last-message {_LAST_MESSAGE_PATH} < /dev/null"
+                f"--output-last-message {_LAST_MESSAGE_PATH} < /dev/null; rc=$?; "
+                'HOOK=$(find /root/.codex -path "*/tracing*/dist/index.mjs" 2>/dev/null | head -1); '
+                'for r in $(find /root/.codex/sessions -name "rollout-*.jsonl" 2>/dev/null | sort); do '
+                'printf \'{"transcript_path": "%s"}\' "$r" | node "$HOOK"; '
+                "done; exit $rc"
             ),
             collect_files=[_LAST_MESSAGE_PATH],
             env_folder=item.env_folder,
