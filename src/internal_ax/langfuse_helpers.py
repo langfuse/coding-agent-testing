@@ -10,9 +10,7 @@ we link it after the fact).
 
 from __future__ import annotations
 
-import datetime as dt
 import hashlib
-import json
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -121,11 +119,10 @@ def score_trace(*, trace_id: str, name: str, value: float | str, comment: str | 
     client().create_score(trace_id=trace_id, name=name, value=value, comment=comment)
 
 
-# --- Correlation: find the trace a sandbox-side plugin created ------------------
-# The plugins create their own trace ids, so after a code-agent run we locate the
-# trace(s) it emitted and link them. Codex lets us tag traces with metadata; for
-# Claude Code we dictate the CLI session id (--session-id) and the plugin sets it
-# as the Langfuse session_id.
+# --- Correlation ----------------------------------------------------------------
+# Both observability plugins support a trace seed (CC_LANGFUSE_TRACE_SEED /
+# LANGFUSE_CODEX_TRACE_SEED) and derive the turn-N trace id from it, so the
+# runners precompute the id and only confirm the (async) upload landed.
 
 
 def deterministic_trace_id(seed: str) -> str:
@@ -152,64 +149,6 @@ def wait_for_trace(trace_id: str, *, retries: int = 10, delay_s: float = 3.0) ->
         except Exception:  # noqa: BLE001 — not-found or transient; retry either way
             time.sleep(delay_s)
     return False
-
-
-def _utc(t: dt.datetime) -> dt.datetime:
-    """The v4 API client requires a tz-aware datetime (it serializes it itself)."""
-    return t.astimezone(dt.timezone.utc)
-
-
-def _poll_trace_ids(list_kwargs: dict, retries: int, delay_s: float) -> list[str]:
-    """Poll trace.list until it returns ids, retrying through transient API
-    errors (ReadTimeout etc.) — one hiccup must not fail a whole agent run."""
-    api = client().api
-    last_err: Exception | None = None
-    for _ in range(retries):
-        try:
-            resp = api.trace.list(limit=50, **list_kwargs)
-        except Exception as e:  # noqa: BLE001 — bounded retries, then give up
-            last_err = e
-            time.sleep(delay_s)
-            continue
-        ids = [t.id for t in getattr(resp, "data", [])]
-        if ids:
-            return ids
-        time.sleep(delay_s)
-    if last_err is not None:
-        print(f"trace lookup gave up after retries; last error: {last_err!r}")
-    return []
-
-
-def find_traces_by_session_id(
-    session_id: str, *, since: dt.datetime, retries: int = 10, delay_s: float = 3.0
-) -> list[str]:
-    """Used for Claude Code: query traces by the per-run session id we chose.
-
-    Plugin export is asynchronous (it flushes on the Stop/SessionEnd hook), so we
-    poll for a short window after the run finishes.
-    """
-    return _poll_trace_ids(
-        {"session_id": session_id, "from_timestamp": _utc(since)}, retries, delay_s
-    )
-
-
-def find_traces_by_user_id(
-    user_id: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
-) -> list[str]:
-    """Fallback correlation: query traces by a per-run user_id."""
-    return _poll_trace_ids({"user_id": user_id, "from_timestamp": _utc(since)}, retries, delay_s)
-
-
-def find_traces_by_metadata(
-    key: str, value: str, *, since: dt.datetime, retries: int = 6, delay_s: float = 2.0
-) -> list[str]:
-    """Used for Codex: query traces by an injected metadata key/value."""
-    # The filter union is discriminated on "type"; metadata key lookups are
-    # "stringObject" filters — omitting type yields a 400 invalid_union.
-    filt = json.dumps(
-        [{"type": "stringObject", "column": "metadata", "operator": "=", "key": key, "value": value}]
-    )
-    return _poll_trace_ids({"filter": filt, "from_timestamp": _utc(since)}, retries, delay_s)
 
 
 def flush() -> None:

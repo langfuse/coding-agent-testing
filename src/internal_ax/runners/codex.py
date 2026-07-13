@@ -2,8 +2,9 @@
 
 Tracing uses the official langfuse/codex-observability-plugin (installed via
 ``codex plugin marketplace add`` and enabled in /root/.codex/config.toml at
-image build). It honours LANGFUSE_CODEX_METADATA / LANGFUSE_CODEX_TAGS, so we
-inject the dataset item id + run name and correlate by metadata afterwards.
+image build). LANGFUSE_CODEX_TRACE_SEED makes the turn's trace id
+deterministic, so we precompute it; LANGFUSE_CODEX_METADATA / _TAGS annotate
+the trace with the dataset item id + run name for context.
 
 Headless notes:
   * ``TRACE_TO_LANGFUSE=true`` is the plugin's opt-in switch (Codex only).
@@ -18,7 +19,6 @@ Headless notes:
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import traceback
 import uuid
@@ -38,7 +38,6 @@ _CODEX_SETUP = [
 
 
 def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
-    started = dt.datetime.now(dt.timezone.utc)
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
     # The plugin (>= PR #24) derives main-thread trace ids from
     # LANGFUSE_CODEX_TRACE_SEED as createTraceId(f"{seed}:{turn}"); one
@@ -77,13 +76,8 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         output = res.files.get(_LAST_MESSAGE_PATH, "") or res.stdout
         transcript = res.stdout + "\n" + res.stderr
 
-        # Primary: the precomputed id — just confirm the plugin's upload landed.
-        # Fallback covers a stale plugin without trace-seed support.
+        # Confirm the plugin's (async) upload of the precomputed trace id landed.
         trace_ids = [trace_id] if lf.wait_for_trace(trace_id) else []
-        if not trace_ids:
-            trace_ids = lf.find_traces_by_metadata(
-                "dataset_item_id", item.id, since=started, retries=3, delay_s=3.0
-            )
         scores = scoring.score_agent_run(
             output, transcript, expected_contains=item.expected_contains, expected_tool=item.expected_tool
         )

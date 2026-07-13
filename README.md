@@ -214,8 +214,8 @@ which run as agent hooks *inside the sandbox* and create their own traces.
 per-cell seed, precomputes the id (headless runs are exactly one turn), and
 after the agent exits just confirms the trace exists (`GET /traces/{id}`,
 polling briefly since plugin export is async) before attaching scores and the
-dataset-run link. The old discovery queries (session id / user id for Claude
-Code, metadata filter for Codex) remain as fallbacks only.
+dataset-run link. There is no discovery machinery — the plugins must be at
+least at the pinned revisions in `images.py` for the seed to be honoured.
 
 Per-agent headless notes:
 

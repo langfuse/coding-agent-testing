@@ -15,7 +15,6 @@ Headless notes:
 
 from __future__ import annotations
 
-import datetime as dt
 import json
 import traceback
 import uuid
@@ -36,9 +35,8 @@ def _parse_result(stdout: str) -> str:
 
 
 def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
-    started = dt.datetime.now(dt.timezone.utc)
     session_id = str(uuid.uuid4())  # we choose it; the plugin reports it to Langfuse
-    # Per-cell user_id so the fallback lookup can't match another item's trace.
+    # Shown as the trace's user in the Langfuse UI — pure annotation.
     user_id = f"internal-ax-{run_name}-{item.id}"[:128]
     # The plugin (>= PR #23) derives trace ids from CC_LANGFUSE_TRACE_SEED as
     # create_trace_id(f"{seed}:{turn}"); `claude -p` is exactly one turn, so the
@@ -66,13 +64,8 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         output = _parse_result(res.stdout)
         transcript = res.stdout + "\n" + res.stderr
 
-        # Primary: the precomputed id — just confirm the plugin's upload landed.
-        # Fallbacks cover a stale plugin (no seed support) or a multi-turn session.
+        # Confirm the plugin's (async) upload of the precomputed trace id landed.
         trace_ids = [trace_id] if lf.wait_for_trace(trace_id) else []
-        if not trace_ids:
-            trace_ids = lf.find_traces_by_session_id(session_id, since=started, retries=3)
-        if not trace_ids:
-            trace_ids = lf.find_traces_by_user_id(user_id, since=started, retries=3)
         scores = scoring.score_agent_run(
             output, transcript, expected_contains=item.expected_contains, expected_tool=item.expected_tool
         )
