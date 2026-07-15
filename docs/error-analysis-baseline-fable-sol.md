@@ -71,8 +71,17 @@ knowledge sources / Langfuse usage / friction), then cross-item synthesis.
   or decoded OTLP payloads against stub servers; several Codex runs verified
   only against mocks and never proved a trace leaves the process.
 - Langfuse-attributable friction (ranked by recurrence):
-  1. `LANGFUSE_HOST` vs `LANGFUSE_BASE_URL` — silently ignored, causes 401 /
-     silent default-to-cloud (3+ incidents).
+  1. `LANGFUSE_HOST` vs `LANGFUSE_BASE_URL` confusion (3+ incidents).
+     CORRECTION after SDK verification: Python SDK ≥ 4.x (incl. the sandbox's
+     4.7.1) DOES honor a lone `LANGFUSE_HOST` as fallback (client.py
+     precedence: base_url arg > LANGFUSE_BASE_URL > host arg > LANGFUSE_HOST
+     > default; PR #1418). The observed 401 was the CONFLICT case: the
+     sandbox pre-sets LANGFUSE_BASE_URL, which silently outranked the
+     agent's LANGFUSE_HOST. The real gap was silence in both fallback and
+     conflict paths — one-time warnings have since been added to the Python
+     SDK. The JS SDK still has the true silent-ignore bug (doesn't read
+     LANGFUSE_HOST at all; honors legacy LANGFUSE_BASEURL spelling without
+     warning) — mirror fix pending.
   2. Legacy JS package shadowing: `npm install langfuse` gets v3; the current
      SDK lives under `@langfuse/*`.
   3. `propagate_attributes` stamps `session.id`/`user.id` on the root span
@@ -122,9 +131,10 @@ competitors' blogs) is what Claude cites.
   this; eval-tool listicles are the gap.
 
 ### Fix the top SDK paper-cuts (product)
-- `LANGFUSE_HOST`: warn loudly (or accept as alias) instead of silently
-  ignoring — the silent fallback to cloud.langfuse.com produced real 401
-  debugging sessions.
+- `LANGFUSE_HOST`/base-url resolution: DONE in Python (fallback already
+  existed since PR #1418; one-time warnings added for the fallback and
+  conflicting-values cases). Remaining: mirror in langfuse-js, which neither
+  reads `LANGFUSE_HOST` nor warns on the legacy `LANGFUSE_BASEURL` spelling.
 - JS: make `npm install langfuse` route agents to the current SDK — README
   banner, `npm deprecate` messaging on the legacy package, or a v5 metapackage.
   Agents follow the package name in their priors.
