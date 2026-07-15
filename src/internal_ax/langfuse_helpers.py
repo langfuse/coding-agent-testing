@@ -153,3 +153,96 @@ def wait_for_trace(trace_id: str, *, retries: int = 30, delay_s: float = 3.0) ->
 
 def flush() -> None:
     client().flush()
+
+
+# --- Sandbox project reset -------------------------------------------------------
+# Agents create datasets/prompts/traces in the scratch project; leftovers from
+# earlier runs contaminate later ones (a stale dataset with a different item
+# schema crashed a real experiment). Best-effort wipe before each run.
+
+
+def reset_sandbox_project() -> dict:
+    """Delete agent-created artifacts from the SANDBOX Langfuse project.
+
+    Hard guards: only ever uses SANDBOX_LANGFUSE_* credentials, and refuses to
+    run if they are missing or identical to the harness project keys — the
+    harness project (datasets, runs, execution traces) must never be touched.
+    Dataset shells can't be deleted via the API; their items and runs are
+    removed, which is what matters for contamination.
+    """
+    import os
+
+    from langfuse import Langfuse
+
+    pk = os.environ.get("SANDBOX_LANGFUSE_PUBLIC_KEY")
+    sk = os.environ.get("SANDBOX_LANGFUSE_SECRET_KEY")
+    if not pk or not sk:
+        return {"skipped": "no sandbox project configured"}
+    if pk == os.environ.get("LANGFUSE_PUBLIC_KEY"):
+        return {"skipped": "sandbox keys identical to harness keys — refusing to reset"}
+
+    sandbox = Langfuse(
+        public_key=pk,
+        secret_key=sk,
+        host=os.environ.get("SANDBOX_LANGFUSE_BASE_URL", "https://cloud.langfuse.com"),
+        tracing_enabled=False,
+    )
+    api = sandbox.api
+    stats = {"dataset_runs": 0, "dataset_items": 0, "prompts": 0, "traces": 0, "errors": 0}
+
+    def guarded(fn, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            stats["errors"] += 1
+            return None
+
+    datasets = guarded(api.datasets.list, limit=100)
+    for ds in getattr(datasets, "data", None) or []:
+        runs = guarded(api.datasets.get_runs, ds.name)
+        for run in getattr(runs, "data", None) or []:
+            if guarded(api.datasets.delete_run, ds.name, run.name) is not None:
+                stats["dataset_runs"] += 1
+        for _ in range(50):  # bounded pagination; re-list after deleting a page
+            items = guarded(api.dataset_items.list, dataset_name=ds.name, limit=100)
+            data = getattr(items, "data", None) or []
+            if not data:
+                break
+            deleted = sum(
+                1 for it in data if guarded(api.dataset_items.delete, it.id) is not None
+            )
+            stats["dataset_items"] += deleted
+            if deleted == 0:  # nothing succeeded — bail instead of spinning
+                break
+
+    # prompts.delete via the SDK breaks on names containing "/" (path segment
+    # not URL-encoded) — delete via raw HTTP with an encoded name instead.
+    import urllib.parse
+
+    import httpx
+
+    base = os.environ.get("SANDBOX_LANGFUSE_BASE_URL", "https://cloud.langfuse.com").rstrip("/")
+    prompts = guarded(api.prompts.list, limit=100)
+    for p in getattr(prompts, "data", None) or []:
+        enc = urllib.parse.quote(p.name, safe="")
+        resp = guarded(httpx.delete, f"{base}/api/public/v2/prompts/{enc}", auth=(pk, sk), timeout=30)
+        if resp is not None and resp.status_code < 300:
+            stats["prompts"] += 1
+        elif resp is not None:
+            stats["errors"] += 1
+
+    # Traces delete asynchronously server-side: collect ids first (paged),
+    # then fire the deletes once — re-listing after delete would return the
+    # same not-yet-processed traces and double-fire.
+    trace_ids: list[str] = []
+    for page in range(1, 21):  # bounded: up to 20 pages x 100
+        traces = guarded(api.trace.list, page=page, limit=100)
+        ids = [t.id for t in getattr(traces, "data", None) or []]
+        if not ids:
+            break
+        trace_ids.extend(ids)
+    for i in range(0, len(trace_ids), 100):
+        if guarded(api.trace.delete_multiple, trace_ids=trace_ids[i : i + 100]) is not None:
+            stats["traces"] += len(trace_ids[i : i + 100])
+
+    return stats

@@ -72,6 +72,14 @@ def orchestrate(payload: dict) -> dict:
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
     base_run_name = cfg.get("run_name") or f"{dataset_name}-{ts}"
     run_configs = select_run_configs(cfg.get("run_configs"))
+
+    # Wipe agent-created artifacts (datasets/prompts/traces) from the scratch
+    # project so earlier runs can't contaminate this one. Payload
+    # {"reset_sandbox": false} opts out; hard-guarded to sandbox creds only.
+    if cfg.get("reset_sandbox", True):
+        from internal_ax.langfuse_helpers import reset_sandbox_project
+
+        print("sandbox reset:", reset_sandbox_project())
     # Optional per-agent model override, e.g. {"claude-code": "opus", "codex": "gpt-5.5-codex"}.
     # Unset -> each CLI's default (currently claude-sonnet-4-6 / gpt-5.5).
     models = cfg.get("models") or {}

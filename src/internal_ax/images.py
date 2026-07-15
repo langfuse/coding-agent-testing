@@ -39,6 +39,7 @@ ORCHESTRATOR_IMAGE = (
         "langfuse>=4.0,<5",
         "fastapi>=0.110",
         "pydantic>=2.6",
+        "anthropic>=0.116",  # LLM-as-judge in scoring.py
     )
     .add_local_python_source("internal_ax")
     .add_local_dir(str(_ENVS_DIR), "/opt/envs")
@@ -103,6 +104,20 @@ AGENT_IMAGE = (
     )
     # Langfuse SDK present for the Claude hook's non-uv fallback path.
     .pip_install("langfuse>=4.0,<5")
+    # Common deps of the envs/ starter apps, preinstalled so agent runs don't
+    # burn turns on pip installs (kept deliberately generic; the JS side stays
+    # uninstalled — npm install noise is part of the realistic environment).
+    .pip_install(
+        "flask>=3.0",
+        "fastapi>=0.110",
+        "uvicorn>=0.29",
+        "openai>=1.40",
+        "langchain>=0.3",
+        "langchain-core>=0.3",
+        "langchain-openai>=0.2",
+        "langsmith>=0.1.80",
+        "pytest>=8",
+    )
     # Claude Code: bake the plugin clone, register its hooks globally, and mark
     # onboarding done so headless runs don't stall on first-run prompts.
     .run_commands(

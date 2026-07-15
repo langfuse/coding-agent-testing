@@ -88,11 +88,15 @@ def run(
         # Confirm the plugin's (async) upload of the precomputed trace id landed.
         trace_ids = [trace_id] if lf.wait_for_trace(trace_id) else []
         scores = scoring.score_agent_run(
-            output, transcript, expected_contains=item.expected_contains, expected_tool=item.expected_tool
+            output,
+            transcript,
+            expected_contains=item.expected_contains,
+            expected_tool=item.expected_tool,
+            task_prompt=item.prompt,
         )
         for tid in trace_ids:
-            for name, value in scores.items():
-                lf.score_trace(trace_id=tid, name=name, value=value)
+            for name, s in scores.items():
+                lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
             lf.link_trace_to_run(
                 run_name=run_name,
                 dataset_item_id=item.id,

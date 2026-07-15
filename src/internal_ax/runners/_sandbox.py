@@ -9,6 +9,9 @@ from pathlib import Path
 
 import modal
 
+from internal_ax.config import MODAL_SECRET_NAMES, SANDBOX_TIMEOUT_S
+from internal_ax.images import AGENT_IMAGE
+
 _LF_KEYS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
 
 
@@ -30,8 +33,6 @@ def _langfuse_env() -> dict[str, str]:
         env[k.replace("LANGFUSE_", "LANGFUSE_CODEX_")] = v
     return env
 
-from internal_ax.config import MODAL_SECRET_NAMES, SANDBOX_TIMEOUT_S
-from internal_ax.images import AGENT_IMAGE
 
 # Env folder names come from dataset item metadata (user-editable in the
 # Langfuse UI) and end up in shell commands/paths — keep them strict.

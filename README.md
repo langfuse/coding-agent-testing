@@ -18,11 +18,12 @@ triggering, and trace inspection all live in the Langfuse UI.
 Scores attached to every trace (the stable contract the Langfuse UI aggregates):
 
 - `task_completed` — fraction of `expected_output.contains` substrings present
-  in the agent's final answer
+  in the agent's final answer (deterministic)
 - `discovered` / `recommended` / `used_correctly` — only when an item sets
-  `expected_output.tool` (for tool-readiness items you add later)
-
-The heuristics live in `scoring.py` — swap in an LLM-as-judge where you need nuance.
+  `expected_output.tool`; scored by an **LLM judge** (claude-opus-4-8) over the
+  final answer + activity transcript, with the judge's reasoning attached as
+  the score comment. Falls back to the old substring heuristics if the judge
+  call fails, so scoring never blocks a run. Lives in `scoring.py`.
 
 ---
 
@@ -192,9 +193,17 @@ recorded per generation in the trace and as run metadata):
 {
   "run_configs": ["claude-code", "codex"],
   "run_name": "baseline-2026-06",
-  "models": { "claude-code": "opus", "codex": "gpt-5.5-codex" }
+  "models": { "claude-code": "opus", "codex": "gpt-5.5-codex" },
+  "reset_sandbox": true
 }
 ```
+
+`reset_sandbox` (default **true**) wipes agent-created artifacts — dataset
+items/runs, prompts, traces — from the **sandbox** Langfuse project before the
+run, so leftovers from earlier runs can't contaminate this one (empty dataset
+shells remain; the API has no dataset delete). Hard-guarded to the
+`SANDBOX_LANGFUSE_*` credentials: it refuses to run against the harness
+project. Set `false` to keep prior artifacts (e.g. for multi-run scenarios).
 
 > Langfuse's remote-run webhook sends **no signature/auth header** and **no
 > `runName`** — hence the `?token=` gate and the auto-generated run name. The
