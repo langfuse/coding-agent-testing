@@ -18,11 +18,12 @@ triggering, and trace inspection all live in the Langfuse UI.
 Scores attached to every trace (the stable contract the Langfuse UI aggregates):
 
 - `task_completed` — fraction of `expected_output.contains` substrings present
-  in the agent's final answer
+  in the agent's final answer (deterministic)
 - `discovered` / `recommended` / `used_correctly` — only when an item sets
-  `expected_output.tool` (for tool-readiness items you add later)
-
-The heuristics live in `scoring.py` — swap in an LLM-as-judge where you need nuance.
+  `expected_output.tool`; scored by an **LLM judge** (claude-opus-4-8) over the
+  final answer + activity transcript, with the judge's reasoning attached as
+  the score comment. Falls back to the old substring heuristics if the judge
+  call fails, so scoring never blocks a run. Lives in `scoring.py`.
 
 ---
 
@@ -56,18 +57,39 @@ trace ids).
 ```
 src/internal_ax/
   app.py              Modal app: webhook + orchestrate + run_unit + smoke_test entrypoint
-  images.py           Modal images (orchestrator; agent sandbox w/ CLIs + plugins)
+  images.py           Modal images (orchestrator; agent sandbox w/ CLIs + plugins + envs/)
   config.py           settings + the run-config matrix (claude-code, codex)
   langfuse_helpers.py dataset fetch, trace↔run linking, correlation queries
   scoring.py          task_completed + tool-readiness heuristics
   runners/
     claude_code.py    Sandbox + claude -p + Claude-Observability-Plugin
     codex.py          Sandbox + codex exec + codex-observability-plugin
-    _sandbox.py       shared sandbox helper
+    _sandbox.py       shared sandbox helper (incl. env-folder materialization)
+envs/
+  <name>/             starter workspaces; dataset items reference them via
+                      metadata.env_folder and the folder is copied into the
+                      sandbox's /workspace before the agent starts
 scripts/
-  seed_dataset.py     create the "code-agent-readiness" dataset in Langfuse
+  seed_dataset.py     create the "code-agent-dataset" dataset in Langfuse
+  bootstrap_modal.sh  create the project secret, deploy, print the webhook URL
   trigger_webhook.py  POST a Langfuse-shaped payload at the deployed webhook
 ```
+
+### Env folders (realistic starting workspaces)
+
+Some tasks need more than a prompt — "instrument *this application* with
+Langfuse" only makes sense if there is an application. Those items set
+`metadata.env_folder` to the name of a directory under `envs/`:
+
+1. `envs/` is baked into the agent image at `/opt/envs` (`copy=True`, so a
+   changed folder just triggers an image rebuild on the next deploy).
+2. When a dataset item carries `metadata.env_folder`, the runner copies
+   `/opt/envs/<name>/.` into the sandbox's `/workspace` before launching the
+   agent — the agent wakes up inside the project.
+3. Items without `env_folder` start in an empty `/workspace` as before.
+
+Folder names are validated (`[A-Za-z0-9][A-Za-z0-9_-]*`) since metadata is
+editable in the Langfuse UI and ends up in a shell command.
 
 ---
 
@@ -89,16 +111,17 @@ cp .env.example .env        # fill in keys
 
 ```bash
 set -a && source .env && set +a
-python scripts/seed_dataset.py     # creates dataset "code-agent-readiness"
+python scripts/seed_dataset.py     # creates dataset "code-agent-dataset"
 ```
 
-Two deliberately simple starter tasks (FizzBuzz, word count) to validate the
-plumbing. Item shape:
+One trivial plumbing check (FizzBuzz) plus one realistic branded task
+(instrument `envs/flask-openai-chat` with Langfuse). Item shape:
 
 ```json
 { "input":            {"prompt": "the task handed verbatim to the agent"},
   "expected_output":  {"contains": ["substrings", "the answer must include"],
-                       "tool": "optional-tool-to-score-discovery-of"} }
+                       "tool": "optional-tool-to-score-discovery-of"},
+  "metadata":         {"env_folder": "optional-starter-workspace-under-envs/"} }
 ```
 
 Add more sophisticated items in the Langfuse UI once the setup works — no code
@@ -106,34 +129,46 @@ change needed as long as they follow this shape.
 
 ## 3. Deploy to Modal
 
-**a. Create the secret** holding everything from `.env`:
+Two layered secrets (later wins on key conflicts), so switching the Langfuse
+project never requires re-entering the agent API keys:
+
+- `internal-ax` (base, one-time): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+- `internal-ax-project`: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
+  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`, and optionally `SANDBOX_LANGFUSE_*`
+
+**Two Langfuse projects** (recommended): the harness project holds the dataset
++ the execution traces; a separate scratch project is what agents see as
+`LANGFUSE_*` inside the sandbox, so datasets/prompts/test traces that tasks
+tell agents to create don't pollute the harness project. Configure it via
+`SANDBOX_LANGFUSE_*` in `.env` — the runner passes it to the sandbox as plain
+`LANGFUSE_*`, while the observability plugins get the harness project via
+prefixed vars (`LANGFUSE_CODEX_*` natively; `CC_LANGFUSE_*` via an env remap
+in the baked hook command, since the Claude hook checks plain vars first).
+Unset = agents share the harness project (previous behavior).
+
+**a. Base secret** (once):
 
 ```bash
-modal secret create internal-ax \
-  LANGFUSE_PUBLIC_KEY=pk-lf-... \
-  LANGFUSE_SECRET_KEY=sk-lf-... \
-  LANGFUSE_BASE_URL=https://cloud.langfuse.com \
-  ANTHROPIC_API_KEY=sk-ant-... \
-  OPENAI_API_KEY=sk-... \
-  WEBHOOK_SECRET="$(openssl rand -hex 24)"
+modal secret create internal-ax ANTHROPIC_API_KEY=sk-ant-... OPENAI_API_KEY=sk-...
 ```
 
-**b. Deploy** (builds both images; the agent image installs Node 22, the Claude
-Code + Codex CLIs, `uv`, and both Langfuse observability plugins):
+**b. Project secret + deploy + webhook URL** — one command, reads `.env`,
+generates and persists `WEBHOOK_SECRET` if missing:
 
 ```bash
-modal deploy -m internal_ax.app
+bash scripts/bootstrap_modal.sh
 ```
 
-Modal prints the web endpoint URL, e.g.
-`https://<workspace>--internal-ax-webhook.modal.run`.
+It prints the exact webhook URL to paste into Langfuse
+(`https://<workspace>--internal-ax-webhook.modal.run?token=...`). Re-run it any
+time you point at a different Langfuse project.
 
 **c. Smoke-test the full path synchronously** (no webhook involved — failures
 surface in your terminal):
 
 ```bash
-modal run -m internal_ax.app --dataset code-agent-readiness --run-configs claude-code
-modal run -m internal_ax.app --dataset code-agent-readiness --run-configs codex
+modal run -m internal_ax.app --dataset code-agent-dataset --run-configs claude-code
+modal run -m internal_ax.app --dataset code-agent-dataset --run-configs codex
 ```
 
 Then check Langfuse: the dataset's **Runs** tab should show one run with a
@@ -149,52 +184,81 @@ the token appended**:
 https://<workspace>--internal-ax-webhook.modal.run?token=<WEBHOOK_SECRET>
 ```
 
-Optionally set a default **payload** (JSON) to narrow the matrix or name the run:
+Optionally set a default **payload** (JSON) to narrow the matrix, name the run,
+or pin per-agent models (unset = each CLI's default; currently
+`claude-sonnet-4-6` for Claude Code, `gpt-5.5` for Codex — the model used is
+recorded per generation in the trace and as run metadata):
 
 ```json
-{ "run_configs": ["claude-code", "codex"], "run_name": "baseline-2026-06" }
+{
+  "run_configs": ["claude-code", "codex"],
+  "run_name": "baseline-2026-06",
+  "models": { "claude-code": "opus", "codex": "gpt-5.5-codex" },
+  "reset_sandbox": true
+}
 ```
 
+`reset_sandbox` (default **true**) wipes agent-created artifacts — dataset
+items/runs, prompts, traces — from the **sandbox** Langfuse project before the
+run, so leftovers from earlier runs can't contaminate this one (empty dataset
+shells remain; the API has no dataset delete). Hard-guarded to the
+`SANDBOX_LANGFUSE_*` credentials: it refuses to run against the harness
+project. Set `false` to keep prior artifacts (e.g. for multi-run scenarios).
+
 > Langfuse's remote-run webhook sends **no signature/auth header** and **no
-> `runName`** — hence the `?token=` gate and the auto-generated run name. It also
-> **aborts after 20s**, so the endpoint only ACKs and spawns; the experiment runs
-> asynchronously.
+> `runName`** — hence the `?token=` gate and the auto-generated run name. The
+> custom config blob arrives as a JSON **string** inside `payload`, which
+> `orchestrate` parses defensively. Langfuse also **aborts after 20s**, so the
+> endpoint only ACKs and spawns; the experiment runs asynchronously.
 
 Now click **Run** in the Langfuse dataset UI. Or trigger it yourself:
 
 ```bash
 python scripts/trigger_webhook.py \
   --url "https://<workspace>--internal-ax-webhook.modal.run?token=$WEBHOOK_SECRET" \
-  --dataset code-agent-readiness
+  --dataset code-agent-dataset
 ```
 
-Results appear under the dataset's **Runs** in Langfuse, one trace per item×agent.
+Results appear under the dataset's **Runs** tab: **one experiment run per
+agent**, named `<base run name>-<config key>` (e.g. `baseline-2026-06-claude-code`
+and `baseline-2026-06-codex`), each carrying `{agent, harness}` run metadata —
+so agents stay directly comparable side by side. Linking uses the low-level
+`dataset_run_items.create` API (not `run_experiment`, which assumes the task
+executes in-process; our traces come from plugins inside the sandboxes).
 
 ---
 
 ## How tracing + correlation works per agent
 
 Both agents are traced by their **official Langfuse observability plugins**,
-which run as agent hooks *inside the sandbox* and create their own traces. Each
-runner then finds those traces and links them to the dataset item + named run:
+which run as agent hooks *inside the sandbox* and create their own traces.
 
-- **Claude Code** — we generate a UUID and pass it as `--session-id`; the
-  plugin reports it as the Langfuse `session_id`, so the runner looks the trace
-  up deterministically by session id (with a per-run `LANGFUSE_USER_ID` as
-  fallback). Important: never add `--bare` to the command — it skips
-  hooks/plugins entirely, i.e. no trace. `IS_SANDBOX=1` is set so
-  `--dangerously-skip-permissions` works as root inside the container.
+**Trace ids are deterministic** — both plugins support a trace seed
+(Claude Code: `CC_LANGFUSE_TRACE_SEED`, PR #23; Codex:
+`LANGFUSE_CODEX_TRACE_SEED`, PR #24) from which the turn-N trace id derives as
+`create_trace_id(f"{seed}:{N}")` (= `sha256[:32]`). Each runner generates a
+per-cell seed, precomputes the id (headless runs are exactly one turn), and
+after the agent exits just confirms the trace exists (`GET /traces/{id}`,
+polling briefly since plugin export is async) before attaching scores and the
+dataset-run link. There is no discovery machinery — the plugins must be at
+least at the pinned revisions in `images.py` for the seed to be honoured.
+
+Per-agent headless notes:
+
+- **Claude Code** — we generate a UUID used as both `--session-id` and the
+  trace seed; the plugin reports it as the Langfuse `session_id`. Important:
+  never add `--bare` to the command — it skips hooks/plugins entirely, i.e. no
+  trace. `IS_SANDBOX=1` is set so `--dangerously-skip-permissions` works as
+  root inside the container.
 - **Codex** — the plugin honours `LANGFUSE_CODEX_METADATA` /
-  `LANGFUSE_CODEX_TAGS`, so we inject `{dataset_item_id, run_name}` and
-  correlate by metadata. `TRACE_TO_LANGFUSE=true` is the plugin's opt-in
-  switch. Headless requirements: `--dangerously-bypass-hook-trust` (Codex
-  silently skips untrusted plugin hooks otherwise) and
-  `--sandbox danger-full-access` (Codex's Landlock sandbox isn't available in
-  containers; the Modal sandbox is the isolation boundary). Auth is
+  `LANGFUSE_CODEX_TAGS`, so we also inject `{dataset_item_id, run_name}` as
+  trace metadata. `TRACE_TO_LANGFUSE=true` is the plugin's opt-in switch.
+  Headless requirements: `--dangerously-bypass-hook-trust` (Codex silently
+  skips untrusted plugin hooks otherwise), `--sandbox danger-full-access`
+  (Codex's Landlock sandbox isn't available in containers; the Modal sandbox is
+  the isolation boundary), stdin redirected from /dev/null, and the manual
+  post-exec hook invocation (see rough edge #4). Auth is
   `codex login --with-api-key` from `OPENAI_API_KEY`.
-
-Plugin export is asynchronous (it flushes on the Stop hook), so the correlation
-queries poll for up to ~30s after the agent exits.
 
 ## Known rough edges / product feedback (you're at Langfuse 🙂)
 
@@ -205,12 +269,28 @@ queries poll for up to ~30s after the agent exits.
 2. **Remote-run webhook** has **no HMAC/signature** and omits **`runName`** — we
    work around both, but a signature + `runName` would let services authenticate
    the call and adopt the run name Langfuse shows in the UI.
+   Also: the custom config blob is delivered as a JSON **string** inside
+   `payload` rather than as a JSON object — every consumer has to double-parse.
 3. Claude Code's `--bare` flag (slated to become the `-p` default at some point)
    skips hooks/plugins; if a CLI update changes the default, traces silently
    stop. Pin or watch the CLI version in `images.py`.
+4. **Codex `exec` mode never fires plugin Stop hooks** (observed with
+   codex-cli 0.139.0, `plugin_hooks = true`, `--dangerously-bypass-hook-trust`;
+   the plugin cache materializes but no hook process ever starts — interactive
+   TUI only?). The runner works around it by piping
+   `{"transcript_path": ...}` into the plugin's `dist/index.mjs` manually after
+   `codex exec` finishes. Worth reporting to the codex-observability-plugin
+   team: headless `codex exec` is exactly the CI/benchmark use case.
+5. Two `codex exec` headless quirks: it blocks forever reading an open
+   non-TTY stdin (fixed with `< /dev/null`), and `trace.list` metadata filters
+   require the `type: "stringObject"` discriminator or return 400.
 
 ## Ops notes
 
+- The Langfuse observability plugins are **pinned by commit SHA** in
+  `images.py` (`CLAUDE_PLUGIN_REV`, `CODEX_PLUGIN_REV`). To pull a newer
+  plugin, bump the SHA and redeploy — the changed layer forces a fresh
+  install. Unpinned clones would silently freeze at build-time HEAD.
 - Modal scales `run_unit` to zero between runs — you pay per second of execution
   only. Cap fan-out with `max_containers` on `run_unit` to bound concurrency/spend.
 - Per-run sandbox budget is `SANDBOX_TIMEOUT_S` (default 900s).

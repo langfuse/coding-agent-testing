@@ -14,7 +14,24 @@ Two images:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import modal
+
+# Starter workspaces for dataset items (metadata.env_folder). Shipped with the
+# ORCHESTRATOR image at /opt/envs and uploaded into each sandbox's /workspace
+# by the runner. They must ride with the orchestrator (not AGENT_IMAGE):
+# AGENT_IMAGE is hydrated inside the remote run_unit container, where repo-local
+# add_local_dir sources don't exist.
+_ENVS_DIR = Path(__file__).resolve().parents[2] / "envs"
+
+# Pinned revisions of the official Langfuse observability plugins. Bump these
+# to pull a newer plugin — a changed SHA invalidates the image layer cache, so
+# the update is explicit and reproducible (an unpinned clone would silently
+# freeze at whatever HEAD was when the layer was first built).
+CLAUDE_PLUGIN_REV = "d654237fdf3fbbb3013c828280e9d4d80537f9a2"  # 2026-07-13, deterministic trace ids (PR #23)
+CODEX_PLUGIN_REV = "33bc50ba75ef82ed1f3718df6fdd06cdbfc7c02e"  # 2026-07-14, args out of tool obs names (PR #26)
 
 ORCHESTRATOR_IMAGE = (
     modal.Image.debian_slim(python_version="3.11")
@@ -22,28 +39,41 @@ ORCHESTRATOR_IMAGE = (
         "langfuse>=4.0,<5",
         "fastapi>=0.110",
         "pydantic>=2.6",
+        "anthropic>=0.116",  # LLM-as-judge in scoring.py
     )
     .add_local_python_source("internal_ax")
+    .add_local_dir(str(_ENVS_DIR), "/opt/envs")
 )
 
 
 # Hook config baked into the agent image. Mirrors the plugin's own hooks.json
 # (Stop + SessionEnd are the only hooks it registers) but points at the baked
 # clone, so headless `claude -p` runs trace without a marketplace install.
-_CLAUDE_SETTINGS = r"""
-{
-  "hooks": {
-    "Stop": [
-      {"hooks": [{"type": "command",
-        "command": "if command -v uv >/dev/null 2>&1; then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"}]}
-    ],
-    "SessionEnd": [
-      {"hooks": [{"type": "command",
-        "command": "if command -v uv >/dev/null 2>&1; then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"}]}
-    ]
-  }
-}
-"""
+#
+# The env remap at the start of the command routes the PLUGIN's upload at the
+# harness Langfuse project (CC_LANGFUSE_*) even when the agent-visible plain
+# LANGFUSE_* vars point at the separate sandbox project. Needed because the
+# hook script checks plain vars BEFORE the CC_-prefixed ones (unlike the Codex
+# plugin, where the prefix takes precedence natively). Falls back to plain
+# vars when CC_* is unset.
+_CLAUDE_HOOK_CMD = (
+    'export LANGFUSE_PUBLIC_KEY="${CC_LANGFUSE_PUBLIC_KEY:-$LANGFUSE_PUBLIC_KEY}" '
+    'LANGFUSE_SECRET_KEY="${CC_LANGFUSE_SECRET_KEY:-$LANGFUSE_SECRET_KEY}" '
+    'LANGFUSE_BASE_URL="${CC_LANGFUSE_BASE_URL:-$LANGFUSE_BASE_URL}"; '
+    "if command -v uv >/dev/null 2>&1; "
+    "then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; "
+    "else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"
+)
+
+_CLAUDE_SETTINGS = json.dumps(
+    {
+        "hooks": {
+            "Stop": [{"hooks": [{"type": "command", "command": _CLAUDE_HOOK_CMD}]}],
+            "SessionEnd": [{"hooks": [{"type": "command", "command": _CLAUDE_HOOK_CMD}]}],
+        }
+    },
+    indent=2,
+)
 
 # Codex config: enable plugin hooks + the Langfuse tracing plugin, and prefer
 # API-key auth (the sandbox has OPENAI_API_KEY, no ChatGPT login).
@@ -74,18 +104,36 @@ AGENT_IMAGE = (
     )
     # Langfuse SDK present for the Claude hook's non-uv fallback path.
     .pip_install("langfuse>=4.0,<5")
+    # Common deps of the envs/ starter apps, preinstalled so agent runs don't
+    # burn turns on pip installs (kept deliberately generic; the JS side stays
+    # uninstalled — npm install noise is part of the realistic environment).
+    .pip_install(
+        "flask>=3.0",
+        "fastapi>=0.110",
+        "uvicorn>=0.29",
+        "openai>=1.40",
+        "langchain>=0.3",
+        "langchain-core>=0.3",
+        "langchain-openai>=0.2",
+        "langsmith>=0.1.80",
+        "pytest>=8",
+    )
     # Claude Code: bake the plugin clone, register its hooks globally, and mark
     # onboarding done so headless runs don't stall on first-run prompts.
     .run_commands(
-        "git clone --depth 1 https://github.com/langfuse/Claude-Observability-Plugin /opt/claude-langfuse-plugin",
+        "git clone https://github.com/langfuse/Claude-Observability-Plugin /opt/claude-langfuse-plugin"
+        f" && git -C /opt/claude-langfuse-plugin checkout {CLAUDE_PLUGIN_REV}",
         "mkdir -p /root/.claude",
         f"cat > /root/.claude/settings.json <<'EOF'\n{_CLAUDE_SETTINGS}\nEOF",
         'echo \'{"hasCompletedOnboarding": true}\' > /root/.claude.json',
     )
     # Codex: official marketplace install of the Langfuse plugin + config.
+    # marketplace add always installs HEAD; the echoed rev is a cache-buster so
+    # bumping CODEX_PLUGIN_REV forces a fresh install of the current plugin.
     .run_commands(
         "mkdir -p /root/.codex",
         f"cat > /root/.codex/config.toml <<'EOF'\n{_CODEX_CONFIG}\nEOF",
-        "codex plugin marketplace add langfuse/codex-observability-plugin",
+        f"echo 'codex plugin rev {CODEX_PLUGIN_REV}'"
+        " && codex plugin marketplace add langfuse/codex-observability-plugin",
     )
 )

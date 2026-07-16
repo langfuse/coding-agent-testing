@@ -5,7 +5,7 @@ payload}), so you can exercise the full pipeline without clicking in the UI.
 
     python scripts/trigger_webhook.py \
         --url "https://<you>--internal-ax-webhook.modal.run?token=$WEBHOOK_SECRET" \
-        --dataset code-agent-readiness \
+        --dataset code-agent-dataset \
         --run-configs claude-code codex
 """
 

@@ -15,8 +15,8 @@ Headless notes:
 
 from __future__ import annotations
 
-import datetime as dt
 import json
+import traceback
 import uuid
 
 from internal_ax import langfuse_helpers as lf
@@ -34,40 +34,64 @@ def _parse_result(stdout: str) -> str:
         return stdout
 
 
-def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
-    started = dt.datetime.now(dt.timezone.utc)
+def run(
+    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+) -> RunResult:
     session_id = str(uuid.uuid4())  # we choose it; the plugin reports it to Langfuse
-    # Per-cell user_id so the fallback lookup can't match another item's trace.
+    # Shown as the trace's user in the Langfuse UI — pure annotation.
     user_id = f"internal-ax-{run_name}-{item.id}"[:128]
+    # The plugin (>= PR #23) derives trace ids from CC_LANGFUSE_TRACE_SEED as
+    # create_trace_id(f"{seed}:{turn}"); `claude -p` is exactly one turn, so the
+    # trace id is known before the agent even starts — no discovery queries.
+    trace_id = lf.deterministic_trace_id(f"{session_id}:1")
+
+    env = {
+        "TRACE_TO_LANGFUSE": "true",  # repo hook ignores it; docs' manual hook requires it
+        "LANGFUSE_USER_ID": user_id,
+        "IS_SANDBOX": "1",
+        "CLAUDE_SESSION_ID": session_id,
+        "CC_LANGFUSE_TRACE_SEED": session_id,
+    }
+    # Payload-provided model rides in as an env var so it's never shell-interpolated.
+    model_flag = ""
+    if model:
+        env["AGENT_MODEL"] = model
+        model_flag = ' --model "$AGENT_MODEL"'
 
     try:
         res = run_agent(
             app,
             prompt=item.prompt,
-            env={
-                "LANGFUSE_USER_ID": user_id,
-                "IS_SANDBOX": "1",
-                "CLAUDE_SESSION_ID": session_id,
-            },
+            env=env,
             setup_cmds=[],
             agent_cmd=(
                 'claude -p "$PROMPT" --session-id "$CLAUDE_SESSION_ID" '
-                "--output-format json --dangerously-skip-permissions"
+                f"--output-format json --dangerously-skip-permissions{model_flag} < /dev/null"
             ),
+            env_folder=item.env_folder,
         )
         output = _parse_result(res.stdout)
         transcript = res.stdout + "\n" + res.stderr
 
-        trace_ids = lf.find_traces_by_session_id(session_id, since=started)
-        if not trace_ids:
-            trace_ids = lf.find_traces_by_user_id(user_id, since=started, retries=3)
+        # Confirm the plugin's (async) upload of the precomputed trace id landed.
+        trace_ids = [trace_id] if lf.wait_for_trace(trace_id) else []
         scores = scoring.score_agent_run(
-            output, transcript, expected_contains=item.expected_contains, expected_tool=item.expected_tool
+            output,
+            transcript,
+            expected_contains=item.expected_contains,
+            expected_tool=item.expected_tool,
+            task_prompt=item.prompt,
         )
         for tid in trace_ids:
-            for name, value in scores.items():
-                lf.score_trace(trace_id=tid, name=name, value=value)
-            lf.link_trace_to_run(run_name=run_name, dataset_item_id=item.id, trace_id=tid)
+            for name, s in scores.items():
+                lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
+            lf.link_trace_to_run(
+                run_name=run_name,
+                dataset_item_id=item.id,
+                trace_id=tid,
+                run_description=f"{config.label} via internal-ax on Modal",
+                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
+            )
         lf.flush()
 
         ok = bool(trace_ids) and res.returncode == 0
@@ -75,4 +99,5 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         return RunResult(config.key, item.id, ok=ok, trace_ids=trace_ids, scores=scores, error=err)
     except Exception as e:  # noqa: BLE001
         lf.flush()
-        return RunResult(config.key, item.id, ok=False, error=repr(e))
+        tb = traceback.format_exc(limit=8)
+        return RunResult(config.key, item.id, ok=False, error=f"{e!r}\n{tb[-1500:]}")

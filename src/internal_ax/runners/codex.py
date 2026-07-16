@@ -2,8 +2,9 @@
 
 Tracing uses the official langfuse/codex-observability-plugin (installed via
 ``codex plugin marketplace add`` and enabled in /root/.codex/config.toml at
-image build). It honours LANGFUSE_CODEX_METADATA / LANGFUSE_CODEX_TAGS, so we
-inject the dataset item id + run name and correlate by metadata afterwards.
+image build). LANGFUSE_CODEX_TRACE_SEED makes the turn's trace id
+deterministic, so we precompute it; LANGFUSE_CODEX_METADATA / _TAGS annotate
+the trace with the dataset item id + run name for context.
 
 Headless notes:
   * ``TRACE_TO_LANGFUSE=true`` is the plugin's opt-in switch (Codex only).
@@ -18,8 +19,9 @@ Headless notes:
 
 from __future__ import annotations
 
-import datetime as dt
 import json
+import traceback
+import uuid
 
 from internal_ax import langfuse_helpers as lf
 from internal_ax import scoring
@@ -35,40 +37,73 @@ _CODEX_SETUP = [
 ]
 
 
-def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
-    started = dt.datetime.now(dt.timezone.utc)
+def run(
+    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+) -> RunResult:
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
+    # The plugin (>= PR #24) derives main-thread trace ids from
+    # LANGFUSE_CODEX_TRACE_SEED as createTraceId(f"{seed}:{turn}"); one
+    # `codex exec` prompt is one turn, so the trace id is known upfront.
+    trace_seed = str(uuid.uuid4())
+    trace_id = lf.deterministic_trace_id(f"{trace_seed}:1")
+
+    env = {
+        "TRACE_TO_LANGFUSE": "true",
+        "LANGFUSE_CODEX_TRACE_SEED": trace_seed,
+        "LANGFUSE_CODEX_METADATA": json.dumps(metadata),
+        "LANGFUSE_CODEX_TAGS": json.dumps(["internal-ax", run_name]),
+    }
+    # Payload-provided model rides in as an env var so it's never shell-interpolated.
+    model_flag = ""
+    if model:
+        env["AGENT_MODEL"] = model
+        model_flag = ' --model "$AGENT_MODEL"'
 
     try:
         res = run_agent(
             app,
             prompt=item.prompt,
-            env={
-                "TRACE_TO_LANGFUSE": "true",
-                "LANGFUSE_CODEX_METADATA": json.dumps(metadata),
-                "LANGFUSE_CODEX_TAGS": json.dumps(["internal-ax", run_name]),
-            },
+            env=env,
             setup_cmds=_CODEX_SETUP,
+            # < /dev/null: with an open (non-TTY) stdin pipe, codex exec prints
+            # "Reading additional input from stdin..." and blocks forever.
+            # Codex (>= 0.139 exec mode) never fires plugin Stop hooks, so we
+            # invoke the Langfuse tracing hook manually over each rollout the
+            # session wrote; the plugin's sidecar files dedupe repeat uploads.
             agent_cmd=(
-                'codex exec "$PROMPT" --json --skip-git-repo-check '
+                f'codex exec "$PROMPT" --json --skip-git-repo-check{model_flag} '
                 "--dangerously-bypass-hook-trust --sandbox danger-full-access "
-                f"--output-last-message {_LAST_MESSAGE_PATH}"
+                f"--output-last-message {_LAST_MESSAGE_PATH} < /dev/null; rc=$?; "
+                'HOOK=$(find /root/.codex -path "*/tracing*/dist/index.mjs" 2>/dev/null | head -1); '
+                'for r in $(find /root/.codex/sessions -name "rollout-*.jsonl" 2>/dev/null | sort); do '
+                'printf \'{"transcript_path": "%s"}\' "$r" | node "$HOOK"; '
+                "done; exit $rc"
             ),
             collect_files=[_LAST_MESSAGE_PATH],
+            env_folder=item.env_folder,
         )
         output = res.files.get(_LAST_MESSAGE_PATH, "") or res.stdout
         transcript = res.stdout + "\n" + res.stderr
 
-        trace_ids = lf.find_traces_by_metadata(
-            "dataset_item_id", item.id, since=started, retries=10, delay_s=3.0
-        )
+        # Confirm the plugin's (async) upload of the precomputed trace id landed.
+        trace_ids = [trace_id] if lf.wait_for_trace(trace_id) else []
         scores = scoring.score_agent_run(
-            output, transcript, expected_contains=item.expected_contains, expected_tool=item.expected_tool
+            output,
+            transcript,
+            expected_contains=item.expected_contains,
+            expected_tool=item.expected_tool,
+            task_prompt=item.prompt,
         )
         for tid in trace_ids:
-            for name, value in scores.items():
-                lf.score_trace(trace_id=tid, name=name, value=value)
-            lf.link_trace_to_run(run_name=run_name, dataset_item_id=item.id, trace_id=tid)
+            for name, s in scores.items():
+                lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
+            lf.link_trace_to_run(
+                run_name=run_name,
+                dataset_item_id=item.id,
+                trace_id=tid,
+                run_description=f"{config.label} via internal-ax on Modal",
+                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
+            )
         lf.flush()
 
         ok = bool(trace_ids) and res.returncode == 0
@@ -76,4 +111,5 @@ def run(item: DatasetItem, config: RunConfig, run_name: str, app) -> RunResult:
         return RunResult(config.key, item.id, ok=ok, trace_ids=trace_ids, scores=scores, error=err)
     except Exception as e:  # noqa: BLE001
         lf.flush()
-        return RunResult(config.key, item.id, ok=False, error=repr(e))
+        tb = traceback.format_exc(limit=8)
+        return RunResult(config.key, item.id, ok=False, error=f"{e!r}\n{tb[-1500:]}")

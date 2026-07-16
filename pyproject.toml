@@ -11,6 +11,8 @@ dependencies = [
     # Webhook endpoint
     "fastapi>=0.110",
     "pydantic>=2.6",
+    # LLM-as-judge scoring
+    "anthropic>=0.116",
 ]
 
 [project.optional-dependencies]
