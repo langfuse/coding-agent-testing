@@ -12,12 +12,17 @@ import contextlib
 import datetime as dt
 import json
 import os
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from internal_ax.config import RunConfig, RunType, select_run_configs
-from internal_ax.langfuse_helpers import client, fetch_dataset_items
+from internal_ax.langfuse_helpers import (
+    ExperimentContext,
+    client,
+    fetch_dataset,
+)
 from internal_ax.runners import RunResult
 from internal_ax.runners._docker import build_local_agent_image
 from internal_ax.skills import ResolvedSkill, SkillRef, resolve_local_git_skill
@@ -45,6 +50,7 @@ def _run_local(
     run_name: str,
     model: str | None,
     skill: ResolvedSkill | None,
+    experiment: ExperimentContext,
 ) -> RunResult:
     if config.run_type == RunType.CLAUDE_CODE:
         from internal_ax.runners import claude_code
@@ -56,6 +62,7 @@ def _run_local(
             app=None,
             model=model,
             skill=skill,
+            experiment=experiment,
             local_docker=True,
         )
     if config.run_type == RunType.CODEX:
@@ -68,6 +75,7 @@ def _run_local(
             app=None,
             model=model,
             skill=skill,
+            experiment=experiment,
             local_docker=True,
         )
     raise ValueError(f"unsupported local run type: {config.run_type}")
@@ -105,7 +113,7 @@ def main() -> None:
     )
 
     print(f"Preparing local agent image {build_local_agent_image(force=args.force_build)}")
-    items = fetch_dataset_items(args.dataset)
+    dataset_id, items = fetch_dataset(args.dataset)
     if args.item_id:
         items = [item for item in items if item.id == args.item_id]
         if not items:
@@ -120,6 +128,15 @@ def main() -> None:
     models = {
         "claude-code": args.claude_model,
         "codex": args.codex_model,
+    }
+    experiments = {
+        config.key: ExperimentContext(
+            id=str(uuid.uuid4()),
+            name=f"{base_run_name}-{config.key}",
+            dataset_id=dataset_id,
+            description=f"{config.label} via internal-ax on local Docker",
+        )
+        for config in configs
     }
     skill_context = (
         resolve_local_git_skill(skill_ref, _REPO_ROOT)
@@ -144,6 +161,7 @@ def main() -> None:
                     run_name,
                     models[config.key],
                     skill,
+                    experiments[config.key],
                 )
                 results.append(result.as_dict())
                 print(json.dumps(result.as_dict(), indent=2))
@@ -151,6 +169,9 @@ def main() -> None:
     summary = {
         "run_name": base_run_name,
         "runs": [f"{base_run_name}-{config.key}" for config in configs],
+        "experiment_ids": {
+            config.key: experiments[config.key].id for config in configs
+        },
         "dataset": args.dataset,
         "units": len(results),
         "ok": sum(bool(result["ok"]) for result in results),

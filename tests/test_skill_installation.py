@@ -67,6 +67,8 @@ def test_runner_installs_skill_without_changing_prompt(
     with (
         patch.object(runner, "run_agent", return_value=sandbox_result) as run_agent,
         patch.object(runner.lf, "wait_for_trace", return_value=True),
+        patch.object(runner.lf, "annotate_skill_reads", return_value=[]),
+        patch.object(runner.lf, "register_native_experiment_item", return_value=None),
         patch.object(runner.lf, "score_trace"),
         patch.object(runner.lf, "link_trace_to_run"),
         patch.object(runner.lf, "flush"),

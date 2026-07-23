@@ -27,7 +27,7 @@ import uuid
 from internal_ax import langfuse_helpers as lf
 from internal_ax import scoring
 from internal_ax.config import RunConfig
-from internal_ax.langfuse_helpers import DatasetItem
+from internal_ax.langfuse_helpers import DatasetItem, ExperimentContext
 from internal_ax.runners import RunResult
 from internal_ax.runners._sandbox import run_agent
 from internal_ax.skills import ResolvedSkill
@@ -47,6 +47,7 @@ def run(
     model: str | None = None,
     *,
     skill: ResolvedSkill | None = None,
+    experiment: ExperimentContext | None = None,
     local_docker: bool = False,
 ) -> RunResult:
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
@@ -125,6 +126,15 @@ def run(
                 run_metadata.update(skill.metadata())
             execution = "local Docker" if local_docker else "Modal"
             run_metadata["execution"] = "local-docker" if local_docker else "modal"
+            skill_read_ids = lf.annotate_skill_reads(trace_id=tid, skill=skill)
+            run_metadata["skill_reads_detected"] = len(skill_read_ids)
+            lf.register_native_experiment_item(
+                experiment=experiment,
+                item=item,
+                trace_id=tid,
+                output=output,
+                run_metadata=run_metadata,
+            )
             lf.link_trace_to_run(
                 run_name=run_name,
                 dataset_item_id=item.id,

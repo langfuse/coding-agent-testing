@@ -1,21 +1,26 @@
-"""Langfuse v4 helpers: dataset fetch, trace<->dataset-run linking, correlation
-queries, and scoring.
+"""Langfuse dataset, experiment, trace-correlation, and scoring helpers.
 
-All linking goes through ``langfuse.api.dataset_run_items.create(...)`` because
-v4 removed the v3 ``dataset_item.run()`` context manager. That single API
-accepts an externally-created ``trace_id``, which is exactly what we need for
-the code-agent runs (the Langfuse plugin creates the trace inside the sandbox;
-we link it after the fact).
+The code-agent plugins create detailed traces inside isolated sandboxes. After
+each trace lands, the harness adds the native Langfuse experiment attributes to
+an experiment-item observation in that same trace. A legacy DatasetRunItem is
+also created during the migration period so older dataset views keep working.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 import time
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, cast
 
 from langfuse import get_client
+from langfuse._client.attributes import LangfuseOtelSpanAttributes
+from opentelemetry import trace as otel_trace_api
+
+from internal_ax.skills import ResolvedSkill
 
 
 def client():
@@ -78,7 +83,37 @@ class DatasetItem:
         return None
 
 
-def fetch_dataset_items(dataset_name: str) -> list[DatasetItem]:
+@dataclass(frozen=True)
+class ExperimentContext:
+    """Identity shared by every item in one native Langfuse experiment."""
+
+    id: str
+    name: str
+    dataset_id: str
+    description: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "dataset_id": self.dataset_id,
+            "description": self.description,
+        }
+
+    @classmethod
+    def from_dict(cls, value: object) -> ExperimentContext | None:
+        if value is None:
+            return None
+        if not isinstance(value, dict):
+            raise ValueError("experiment must be an object")
+        required = {"id", "name", "dataset_id", "description"}
+        if set(value) != required:
+            raise ValueError(f"experiment fields must be exactly {sorted(required)}")
+        return cls(**{key: str(value[key]) for key in required})
+
+
+def fetch_dataset(dataset_name: str) -> tuple[str, list[DatasetItem]]:
+    """Fetch a hosted dataset's ID and active items."""
     ds = client().get_dataset(dataset_name)
     items: list[DatasetItem] = []
     for it in ds.items:
@@ -90,7 +125,195 @@ def fetch_dataset_items(dataset_name: str) -> list[DatasetItem]:
                 metadata=dict(getattr(it, "metadata", None) or {}),
             )
         )
+    return ds.id, items
+
+
+def fetch_dataset_items(dataset_name: str) -> list[DatasetItem]:
+    """Compatibility wrapper for callers that only need dataset items."""
+    _, items = fetch_dataset(dataset_name)
     return items
+
+
+def _json(value: Any) -> str:
+    return json.dumps(value, default=str, separators=(",", ":"))
+
+
+def _set_scalar_attribute(otel_span, name: str, value: Any) -> None:
+    if isinstance(value, (str, bool, int, float)):
+        otel_span.set_attribute(name, value)
+
+
+def _datetime_to_ns(value: datetime) -> int:
+    """Convert without the sub-millisecond drift of float timestamps."""
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    delta = value.astimezone(timezone.utc) - epoch
+    return (
+        (delta.days * 86_400 + delta.seconds) * 1_000_000_000
+        + delta.microseconds * 1_000
+    )
+
+
+def _trace_observations(trace_id: str) -> list[Any]:
+    response = client().api.observations.get_many(
+        trace_id=trace_id,
+        fields="basic,io,metadata,time",
+        limit=1000,
+    )
+    return list(response.data)
+
+
+def _agent_root_observation_id(observations: list[Any]) -> str | None:
+    """Find the plugin's logical root even when it has a synthetic remote parent."""
+    ids = {observation.id for observation in observations}
+    candidates = [
+        observation
+        for observation in observations
+        if not observation.parent_observation_id
+        or observation.parent_observation_id not in ids
+    ]
+    agents = [observation for observation in candidates if observation.type == "AGENT"]
+    selected = agents[:1]
+    return selected[0].id if selected else None
+
+
+_RUNTIME_SKILL_FILE_RE = re.compile(
+    r"/root/\.(?:agents|claude)/skills/"
+    r"(?P<skill>[A-Za-z0-9][A-Za-z0-9_-]{0,63})/"
+    r"(?P<file>[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)"
+)
+
+
+def detect_skill_reads(observations: list[Any], skill: ResolvedSkill) -> list[tuple[Any, str]]:
+    """Detect committed skill files read by generic shell-tool observations."""
+    allowed_files = {
+        path.relative_to(skill.root).as_posix()
+        for path in skill.root.rglob("*")
+        if path.is_file()
+    }
+    detected: list[tuple[Any, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for observation in observations:
+        if observation.type != "TOOL":
+            continue
+        value = observation.input
+        text = value if isinstance(value, str) else _json(value)
+        for match in _RUNTIME_SKILL_FILE_RE.finditer(text):
+            relative = match.group("file")
+            key = (observation.id, relative)
+            if (
+                match.group("skill") == skill.name
+                and relative in allowed_files
+                and key not in seen
+            ):
+                seen.add(key)
+                detected.append((observation, relative))
+    return detected
+
+
+def annotate_skill_reads(*, trace_id: str, skill: ResolvedSkill | None) -> list[str]:
+    """Add explicit skill-read children at the original tool-call times.
+
+    Agent plugins expose file reads as generic shell tools. These small spans
+    make the invocation visible beneath the source tool while retaining its
+    original timing and avoiding duplicated skill contents.
+
+    Langfuse's public observation helper does not accept historical start
+    times, so this uses its OpenTelemetry tracer directly. The surrounding
+    observation creation still goes through Langfuse to retain its normal
+    attribute serialization and export behavior.
+    """
+    if skill is None:
+        return []
+    observations = _trace_observations(trace_id)
+
+    created: list[str] = []
+    for source, relative in detect_skill_reads(observations, skill):
+        kind = "entrypoint" if relative == "SKILL.md" else "reference"
+        langfuse = client()
+        remote_parent = langfuse._create_remote_parent_span(
+            trace_id=trace_id,
+            parent_span_id=source.id,
+        )
+        start_time_ns = _datetime_to_ns(source.start_time)
+        end_time = source.end_time or source.start_time
+        with otel_trace_api.use_span(cast(otel_trace_api.Span, remote_parent)):
+            otel_span = langfuse._otel_tracer.start_span(
+                name=f"skill.read · {skill.name}/{relative}",
+                start_time=start_time_ns,
+            )
+            otel_span.set_attribute(LangfuseOtelSpanAttributes.AS_ROOT, True)
+            span = langfuse._create_observation_from_otel_span(
+                otel_span=otel_span,
+                as_type="span",
+                input={"skill": skill.name, "file": relative, "kind": kind},
+                metadata={
+                    "derived": True,
+                    "source_observation_id": source.id,
+                    "source_tool_name": source.name,
+                    "skill_name": skill.name,
+                    "skill_file": relative,
+                    "skill_file_kind": kind,
+                },
+            )
+        span.end(end_time=_datetime_to_ns(end_time))
+        created.append(span.id)
+    return created
+
+
+def register_native_experiment_item(
+    *,
+    experiment: ExperimentContext | None,
+    item: DatasetItem,
+    trace_id: str,
+    output: Any,
+    run_metadata: dict[str, Any],
+) -> str | None:
+    """Attach native experiment attributes to an item root in an agent trace.
+
+    The official code-agent plugins own the detailed trace, so the harness
+    cannot establish experiment baggage before those plugin spans start. It
+    instead appends one logical experiment-item root to the same trace and sets
+    the raw OpenTelemetry attributes documented by Langfuse.
+    """
+    if experiment is None:
+        return None
+    observations = _trace_observations(trace_id)
+    agent_root_id = _agent_root_observation_id(observations)
+    trace_context: dict[str, str] = {"trace_id": trace_id}
+    if agent_root_id:
+        trace_context["parent_span_id"] = agent_root_id
+
+    span = client().start_observation(
+        trace_context=trace_context,
+        name="experiment item",
+        as_type="span",
+        input=item.input,
+        output=output,
+        metadata={
+            "native_experiment": True,
+            "agent_root_observation_id": agent_root_id,
+            **run_metadata,
+        },
+    )
+    otel_span = span._otel_span
+    attributes = {
+        "langfuse.experiment.id": experiment.id,
+        "langfuse.experiment.name": experiment.name,
+        "langfuse.experiment.dataset.id": experiment.dataset_id,
+        "langfuse.experiment.description": experiment.description,
+        "langfuse.environment": "experiment",
+        "langfuse.experiment.item.id": item.id,
+        "langfuse.experiment.item.root_observation_id": span.id,
+        "langfuse.experiment.item.expected_output": _json(item.expected_output),
+    }
+    for name, value in attributes.items():
+        _set_scalar_attribute(otel_span, name, value)
+    for key, value in run_metadata.items():
+        _set_scalar_attribute(otel_span, f"langfuse.experiment.metadata.{key}", value)
+    for key, value in item.metadata.items():
+        _set_scalar_attribute(otel_span, f"langfuse.experiment.item.metadata.{key}", value)
+    span.end()
+    return span.id
 
 
 def link_trace_to_run(
@@ -114,9 +337,20 @@ def link_trace_to_run(
     client().api.dataset_run_items.create(**kwargs)
 
 
-def score_trace(*, trace_id: str, name: str, value: float | str, comment: str | None = None) -> None:
+def score_trace(
+    *,
+    trace_id: str,
+    name: str,
+    value: float | str,
+    comment: str | None = None,
+) -> None:
     """Attach a score to a trace by id (works outside any active span context)."""
-    client().create_score(trace_id=trace_id, name=name, value=value, comment=comment)
+    client().create_score(
+        trace_id=trace_id,
+        name=name,
+        value=value,
+        comment=comment,
+    )
 
 
 # --- Correlation ----------------------------------------------------------------
@@ -140,14 +374,28 @@ def deterministic_trace_id(seed: str) -> str:
 
 
 def wait_for_trace(trace_id: str, *, retries: int = 30, delay_s: float = 3.0) -> bool:
-    """Poll until a known trace id is queryable (plugin export is async)."""
+    """Poll until the plugin's completed agent root is queryable.
+
+    A trace can become queryable while its observations are still being
+    indexed. Waiting for the ended AGENT root prevents post-processing from
+    reading a partial tree and parenting derived observations to an arbitrary
+    early tool span.
+    """
     api = client().api
     for _ in range(retries):
         try:
             api.trace.get(trace_id)
-            return True
+            observations = _trace_observations(trace_id)
+            root_id = _agent_root_observation_id(observations)
+            root = next(
+                (observation for observation in observations if observation.id == root_id),
+                None,
+            )
+            if root is not None and root.end_time is not None:
+                return True
         except Exception:  # noqa: BLE001 — not-found or transient; retry either way
-            time.sleep(delay_s)
+            pass
+        time.sleep(delay_s)
     return False
 
 

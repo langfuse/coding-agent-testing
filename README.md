@@ -49,9 +49,9 @@ Langfuse  ──POST {projectId,datasetId,datasetName,payload}──▶  webhook
 ```
 
 The plugins create traces *from inside the sandbox*; the runner then locates
-them and links via `langfuse.api.dataset_run_items.create(run_name=…,
-dataset_item_id=…, trace_id=…)` (the v4 API that accepts externally-created
-trace ids).
+them, adds the native Langfuse experiment/item attributes, and also links via
+`langfuse.api.dataset_run_items.create(run_name=…, dataset_item_id=…,
+trace_id=…)` while the legacy dataset-run view remains in use.
 
 ### Repo layout
 
@@ -129,7 +129,11 @@ before the agent process starts:
 The dataset prompt is passed through unchanged. The harness never mentions or
 invokes the skill; deciding whether it is relevant is part of the agent run.
 Run metadata records `skill_name`, `skill_commit`, `skill_path`, and
-`skill_digest`.
+`skill_digest`. After the plugin trace is fully indexed, reads of committed
+skill files are represented by explicit `skill.read · <skill>/<file>` children
+under the original shell-tool observation. Those derived children reuse the
+tool's original start/end timestamps, so they appear where the read happened
+in the trace rather than at the end.
 
 ---
 
@@ -213,8 +217,8 @@ python scripts/run_local.py \
 ```
 
 The first run builds `internal-ax-agent:local`; later runs reuse the image.
-Results appear in Langfuse under the dataset's **Runs** tab as
-`<run-name>-claude-code` and/or `<run-name>-codex`, with
+Results appear in Langfuse under **Experiments** and under the dataset's
+**Runs** tab as `<run-name>-claude-code` and/or `<run-name>-codex`, with
 `execution=local-docker` and the skill identity in run metadata.
 
 ## 4. Deploy to Modal

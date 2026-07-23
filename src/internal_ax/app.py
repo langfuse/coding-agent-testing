@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import uuid
 
 import fastapi
 import modal
@@ -28,7 +29,7 @@ from internal_ax.config import (
     select_run_configs,
 )
 from internal_ax.images import ORCHESTRATOR_IMAGE
-from internal_ax.langfuse_helpers import DatasetItem, fetch_dataset_items
+from internal_ax.langfuse_helpers import DatasetItem, ExperimentContext, fetch_dataset
 from internal_ax.skills import ResolvedSkill, SkillRef, resolve_github_skill
 
 app = modal.App("internal-ax")
@@ -43,6 +44,7 @@ def _dispatch(
     model: str | None,
     *,
     skill: ResolvedSkill | None = None,
+    experiment: ExperimentContext | None = None,
     local_docker: bool = False,
 ):
     """Route one cell to its runner. Imports are local so cold starts stay light."""
@@ -51,13 +53,27 @@ def _dispatch(
         from internal_ax.runners import claude_code
 
         return claude_code.run(
-            item, config, run_name, app, model=model, skill=skill, local_docker=local_docker
+            item,
+            config,
+            run_name,
+            app,
+            model=model,
+            skill=skill,
+            experiment=experiment,
+            local_docker=local_docker,
         )
     if rt == RunType.CODEX:
         from internal_ax.runners import codex
 
         return codex.run(
-            item, config, run_name, app, model=model, skill=skill, local_docker=local_docker
+            item,
+            config,
+            run_name,
+            app,
+            model=model,
+            skill=skill,
+            experiment=experiment,
+            local_docker=local_docker,
         )
     raise ValueError(f"unknown run type: {rt}")
 
@@ -70,11 +86,23 @@ def run_unit(unit: dict) -> dict:
         if config is None:
             return {"ok": False, "error": f"unknown run config {unit['config_key']}"}
         skill_ref = SkillRef.from_dict(unit.get("skill"))
+        experiment = ExperimentContext.from_dict(unit.get("experiment"))
         if skill_ref is None:
-            return _dispatch(item, config, unit["run_name"], unit.get("model")).as_dict()
+            return _dispatch(
+                item,
+                config,
+                unit["run_name"],
+                unit.get("model"),
+                experiment=experiment,
+            ).as_dict()
         with resolve_github_skill(skill_ref) as skill:
             return _dispatch(
-                item, config, unit["run_name"], unit.get("model"), skill=skill
+                item,
+                config,
+                unit["run_name"],
+                unit.get("model"),
+                skill=skill,
+                experiment=experiment,
             ).as_dict()
     except Exception as exc:  # noqa: BLE001 — map cells must report, not abort the full run
         return {
@@ -112,7 +140,16 @@ def orchestrate(payload: dict) -> dict:
     # Unset -> each CLI's default (currently claude-sonnet-4-6 / gpt-5.5).
     models = cfg.get("models") or {}
 
-    items = fetch_dataset_items(dataset_name)
+    dataset_id, items = fetch_dataset(dataset_name)
+    experiments = {
+        rc.key: ExperimentContext(
+            id=str(uuid.uuid4()),
+            name=f"{base_run_name}-{rc.key}",
+            dataset_id=dataset_id,
+            description=f"{rc.label} via internal-ax on Modal",
+        )
+        for rc in run_configs
+    }
     # One Langfuse experiment (dataset run) PER agent: "<base>-<config key>",
     # so Claude Code and Codex results stay comparable side by side in the UI.
     units = [
@@ -127,6 +164,7 @@ def orchestrate(payload: dict) -> dict:
             "run_name": f"{base_run_name}-{rc.key}",
             "model": models.get(rc.key),
             "skill": skill_ref.as_dict() if skill_ref else None,
+            "experiment": experiments[rc.key].as_dict(),
         }
         for it in items
         for rc in run_configs
@@ -140,6 +178,9 @@ def orchestrate(payload: dict) -> dict:
         "run_name": base_run_name,
         "runs": sorted({u["run_name"] for u in units}),
         "dataset": dataset_name,
+        "experiment_ids": {
+            key: experiment.id for key, experiment in experiments.items()
+        },
         "units": len(units),
         "ok": sum(1 for r in results if r.get("ok")),
         "failed": sum(1 for r in results if not r.get("ok")),
