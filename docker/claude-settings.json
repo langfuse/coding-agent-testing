@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "export LANGFUSE_PUBLIC_KEY=\"${CC_LANGFUSE_PUBLIC_KEY:-$LANGFUSE_PUBLIC_KEY}\" LANGFUSE_SECRET_KEY=\"${CC_LANGFUSE_SECRET_KEY:-$LANGFUSE_SECRET_KEY}\" LANGFUSE_BASE_URL=\"${CC_LANGFUSE_BASE_URL:-$LANGFUSE_BASE_URL}\"; if command -v uv >/dev/null 2>&1; then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "export LANGFUSE_PUBLIC_KEY=\"${CC_LANGFUSE_PUBLIC_KEY:-$LANGFUSE_PUBLIC_KEY}\" LANGFUSE_SECRET_KEY=\"${CC_LANGFUSE_SECRET_KEY:-$LANGFUSE_SECRET_KEY}\" LANGFUSE_BASE_URL=\"${CC_LANGFUSE_BASE_URL:-$LANGFUSE_BASE_URL}\"; if command -v uv >/dev/null 2>&1; then exec uv run --quiet --script /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; else exec python3 /opt/claude-langfuse-plugin/hooks/langfuse_hook.py; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

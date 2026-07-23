@@ -11,6 +11,7 @@ import modal
 
 from internal_ax.config import MODAL_SECRET_NAMES, SANDBOX_TIMEOUT_S
 from internal_ax.images import AGENT_IMAGE
+from internal_ax.skills import ResolvedSkill
 
 _LF_KEYS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
 
@@ -77,6 +78,9 @@ def run_agent(
     agent_cmd: str,
     collect_files: list[str] | None = None,
     env_folder: str | None = None,
+    skill: ResolvedSkill | None = None,
+    skill_home: str | None = None,
+    local_docker: bool = False,
 ) -> SandboxResult:
     """Spin up an isolated sandbox, run setup then the agent command, tear down.
 
@@ -89,6 +93,22 @@ def run_agent(
     instead of an empty directory.
     """
     env_src = _resolve_env_folder(env_folder) if env_folder else None
+    if skill is not None and not skill_home:
+        raise ValueError("skill_home is required when a skill is supplied")
+
+    if local_docker:
+        from internal_ax.runners._docker import run_agent_docker
+
+        return run_agent_docker(
+            prompt=prompt,
+            env={**_langfuse_env(), **env},
+            setup_cmds=setup_cmds,
+            agent_cmd=agent_cmd,
+            collect_files=collect_files,
+            env_src=env_src,
+            skill=skill,
+            skill_home=skill_home,
+        )
 
     secrets = [
         *[modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES],
@@ -104,6 +124,9 @@ def run_agent(
     try:
         if env_src is not None:
             _upload_dir(sb, env_src, "/workspace")
+        if skill is not None:
+            sb.exec("mkdir", "-p", f"{skill_home}/{skill.name}").wait()
+            _upload_dir(sb, skill.root, f"{skill_home}/{skill.name}")
         for cmd in ["mkdir -p /workspace", *setup_cmds]:
             p = sb.exec("bash", "-lc", cmd)
             p.wait()

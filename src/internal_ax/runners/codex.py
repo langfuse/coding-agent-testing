@@ -20,6 +20,7 @@ Headless notes:
 from __future__ import annotations
 
 import json
+import os
 import traceback
 import uuid
 
@@ -29,6 +30,7 @@ from internal_ax.config import RunConfig
 from internal_ax.langfuse_helpers import DatasetItem
 from internal_ax.runners import RunResult
 from internal_ax.runners._sandbox import run_agent
+from internal_ax.skills import ResolvedSkill
 
 _LAST_MESSAGE_PATH = "/tmp/codex-last-message.txt"
 
@@ -38,9 +40,18 @@ _CODEX_SETUP = [
 
 
 def run(
-    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+    item: DatasetItem,
+    config: RunConfig,
+    run_name: str,
+    app,
+    model: str | None = None,
+    *,
+    skill: ResolvedSkill | None = None,
+    local_docker: bool = False,
 ) -> RunResult:
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
+    if skill:
+        metadata.update(skill.metadata())
     # The plugin (>= PR #24) derives main-thread trace ids from
     # LANGFUSE_CODEX_TRACE_SEED as createTraceId(f"{seed}:{turn}"); one
     # `codex exec` prompt is one turn, so the trace id is known upfront.
@@ -60,11 +71,16 @@ def run(
         model_flag = ' --model "$AGENT_MODEL"'
 
     try:
+        setup_cmds = (
+            []
+            if local_docker and not os.environ.get("OPENAI_API_KEY")
+            else _CODEX_SETUP
+        )
         res = run_agent(
             app,
             prompt=item.prompt,
             env=env,
-            setup_cmds=_CODEX_SETUP,
+            setup_cmds=setup_cmds,
             # < /dev/null: with an open (non-TTY) stdin pipe, codex exec prints
             # "Reading additional input from stdin..." and blocks forever.
             # Codex (>= 0.139 exec mode) never fires plugin Stop hooks, so we
@@ -81,6 +97,9 @@ def run(
             ),
             collect_files=[_LAST_MESSAGE_PATH],
             env_folder=item.env_folder,
+            skill=skill,
+            skill_home="/root/.agents/skills",
+            local_docker=local_docker,
         )
         output = res.files.get(_LAST_MESSAGE_PATH, "") or res.stdout
         transcript = res.stdout + "\n" + res.stderr
@@ -97,12 +116,21 @@ def run(
         for tid in trace_ids:
             for name, s in scores.items():
                 lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
+            run_metadata = {
+                "agent": config.key,
+                "harness": "internal-ax",
+                "model": model or "cli-default",
+            }
+            if skill:
+                run_metadata.update(skill.metadata())
+            execution = "local Docker" if local_docker else "Modal"
+            run_metadata["execution"] = "local-docker" if local_docker else "modal"
             lf.link_trace_to_run(
                 run_name=run_name,
                 dataset_item_id=item.id,
                 trace_id=tid,
-                run_description=f"{config.label} via internal-ax on Modal",
-                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
+                run_description=f"{config.label} via internal-ax on {execution}",
+                metadata=run_metadata,
             )
         lf.flush()
 

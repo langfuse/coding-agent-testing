@@ -39,6 +39,8 @@ ORCHESTRATOR_IMAGE = (
         "langfuse>=4.0,<5",
         "fastapi>=0.110",
         "pydantic>=2.6",
+        "httpx>=0.27",
+        "pyyaml>=6.0",
         "anthropic>=0.116",  # LLM-as-judge in scoring.py
     )
     .add_local_python_source("internal_ax")

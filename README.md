@@ -1,9 +1,10 @@
 # internal-ax — code-agent readiness tester
 
-Runs **code agents** (Claude Code and Codex) headlessly **on Modal** against a
-**Langfuse dataset**, and traces every run back to **Langfuse**. Triggered by a
-Langfuse **remote dataset run** (or manually). No UI of its own — datasets,
-triggering, and trace inspection all live in the Langfuse UI.
+Runs **code agents** (Claude Code and Codex) headlessly in local Docker
+containers or on **Modal** against a **Langfuse dataset**, and traces every run
+back to **Langfuse**. Deployed runs are triggered by a Langfuse remote dataset
+run (or manually). No UI of its own — datasets, triggering, and trace inspection
+all live in the Langfuse UI.
 
 > Scope note: bare-model and model+search checks are intentionally **not** part
 > of this project — those can be run directly in the Langfuse UI via dataset
@@ -69,8 +70,11 @@ envs/
   <name>/             starter workspaces; dataset items reference them via
                       metadata.env_folder and the folder is copied into the
                       sandbox's /workspace before the agent starts
+runtime-skills/
+  <name>/             Agent Skills selected by exact commit + path at run time
 scripts/
   seed_dataset.py     create the "code-agent-dataset" dataset in Langfuse
+  run_local.py        run the same agents locally in disposable Docker containers
   bootstrap_modal.sh  create the project secret, deploy, print the webhook URL
   trigger_webhook.py  POST a Langfuse-shaped payload at the deployed webhook
 ```
@@ -91,13 +95,51 @@ Langfuse" only makes sense if there is an application. Those items set
 Folder names are validated (`[A-Za-z0-9][A-Za-z0-9_-]*`) since metadata is
 editable in the Langfuse UI and ends up in a shell command.
 
+### Commit-pinned runtime skills
+
+An experiment can install one Agent Skill from an exact commit in this
+repository. The commit can be on an unmerged branch. Add the skill as ordinary
+files:
+
+```text
+runtime-skills/
+  langfuse/
+    SKILL.md
+    references/
+    scripts/
+```
+
+Then select it in the experiment payload:
+
+```json
+{
+  "skill": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "path": "runtime-skills/langfuse"
+  }
+}
+```
+
+The harness validates and hashes the committed directory, then installs it
+before the agent process starts:
+
+- Claude Code: `/root/.claude/skills/<skill-name>/`
+- Codex: `/root/.agents/skills/<skill-name>/`
+
+The dataset prompt is passed through unchanged. The harness never mentions or
+invokes the skill; deciding whether it is relevant is part of the agent run.
+Run metadata records `skill_name`, `skill_commit`, `skill_path`, and
+`skill_digest`.
+
 ---
 
 ## Prerequisites
 
 - A **Langfuse Cloud** project (Python SDK v4).
-- A **Modal** account (`pip install modal && modal token new`).
-- **Anthropic** (Claude Code) and **OpenAI** (Codex) API keys.
+- **Docker Desktop** for local agent runs.
+- An **Anthropic** API key for Claude Code. Codex can use either an OpenAI API
+  key or an existing local `codex login` session.
+- A **Modal** account only for the maintainer who deploys the shared service.
 
 ## 1. Local setup
 
@@ -127,14 +169,63 @@ One trivial plumbing check (FizzBuzz) plus one realistic branded task
 Add more sophisticated items in the Langfuse UI once the setup works — no code
 change needed as long as they follow this shape.
 
-## 3. Deploy to Modal
+## 3. Run agents locally
+
+Local runs use disposable Docker containers and follow the same tracing,
+scoring, and Langfuse dataset-linking path as deployed runs. No Modal account
+or token is used.
+
+Fill these values in `.env`:
+
+```dotenv
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_BASE_URL=https://cloud.langfuse.com
+ANTHROPIC_API_KEY=sk-ant-...  # when running Claude Code
+OPENAI_API_KEY=sk-...         # optional if ~/.codex/auth.json already exists
+```
+
+When no `OPENAI_API_KEY` is set, local Codex runs mount the existing
+`~/.codex/auth.json` into the disposable container. The file is not copied into
+the repository or agent image.
+
+Run one inexpensive dataset item first:
+
+```bash
+python scripts/run_local.py \
+  --dataset code-agent-dataset \
+  --run-configs claude-code \
+  --item-limit 1 \
+  --run-name local-skill-smoke
+```
+
+To test a skill, commit it locally first. The commit does not need to be pushed
+for a local run:
+
+```bash
+python scripts/run_local.py \
+  --dataset code-agent-dataset \
+  --run-configs claude-code codex \
+  --item-limit 1 \
+  --skill-commit "$(git rev-parse HEAD)" \
+  --skill-path runtime-skills/my-skill \
+  --run-name local-my-skill
+```
+
+The first run builds `internal-ax-agent:local`; later runs reuse the image.
+Results appear in Langfuse under the dataset's **Runs** tab as
+`<run-name>-claude-code` and/or `<run-name>-codex`, with
+`execution=local-docker` and the skill identity in run metadata.
+
+## 4. Deploy to Modal
 
 Two layered secrets (later wins on key conflicts), so switching the Langfuse
 project never requires re-entering the agent API keys:
 
 - `internal-ax` (base, one-time): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - `internal-ax-project`: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
-  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`, and optionally `SANDBOX_LANGFUSE_*`
+  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`, a read-only `SKILL_GITHUB_TOKEN`,
+  and optionally `SANDBOX_LANGFUSE_*`
 
 **Two Langfuse projects** (recommended): the harness project holds the dataset
 + the execution traces; a separate scratch project is what agents see as
@@ -163,6 +254,12 @@ It prints the exact webhook URL to paste into Langfuse
 (`https://<workspace>--internal-ax-webhook.modal.run?token=...`). Re-run it any
 time you point at a different Langfuse project.
 
+Because `langfuse/internal-ax` is an internal repository, the deployed service
+needs one centrally managed `SKILL_GITHUB_TOKEN` with read-only repository
+contents access. Individual experiment users do not need Modal or GitHub API
+credentials; they only push their skill commit to this repository and select
+it in Langfuse.
+
 **c. Smoke-test the full path synchronously** (no webhook involved — failures
 surface in your terminal):
 
@@ -174,7 +271,7 @@ modal run -m internal_ax.app --dataset code-agent-dataset --run-configs codex
 Then check Langfuse: the dataset's **Runs** tab should show one run with a
 linked, scored trace per item.
 
-## 4. Wire up the Langfuse remote dataset run
+## 5. Wire up the Langfuse remote dataset run
 
 In Langfuse: open the dataset → **Start Experiment** → **Custom Experiment** →
 the ⚡ (lightning) icon → set the **webhook URL** to your Modal endpoint **with
@@ -194,6 +291,10 @@ recorded per generation in the trace and as run metadata):
   "run_configs": ["claude-code", "codex"],
   "run_name": "baseline-2026-06",
   "models": { "claude-code": "opus", "codex": "gpt-5.5-codex" },
+  "skill": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "path": "runtime-skills/langfuse"
+  },
   "reset_sandbox": true
 }
 ```
@@ -216,7 +317,9 @@ Now click **Run** in the Langfuse dataset UI. Or trigger it yourself:
 ```bash
 python scripts/trigger_webhook.py \
   --url "https://<workspace>--internal-ax-webhook.modal.run?token=$WEBHOOK_SECRET" \
-  --dataset code-agent-dataset
+  --dataset code-agent-dataset \
+  --skill-commit 0123456789abcdef0123456789abcdef01234567 \
+  --skill-path runtime-skills/langfuse
 ```
 
 Results appear under the dataset's **Runs** tab: **one experiment run per

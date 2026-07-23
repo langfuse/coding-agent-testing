@@ -1,0 +1,7 @@
+classifier:
+  model: gpt-4
+  prompt: "Classify the following customer message into one of these categories: billing, technical, general, feature_request, complaint. Consider the tone and content carefully. Message: {message}"
+
+sentiment:
+  model: gpt-4
+  prompt: "Analyze the sentiment of the following customer interaction and return one of: positive, negative, neutral, mixed. Provide a confidence score from 0 to 1. Respond as JSON with keys 'sentiment' and 'confidence'. Text: {text}"

@@ -32,7 +32,12 @@ SECRET_ARGS=(
   LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY"
   LANGFUSE_BASE_URL="$LANGFUSE_BASE_URL"
   WEBHOOK_SECRET="$WEBHOOK_SECRET"
+  SKILL_GITHUB_REPOSITORY="${SKILL_GITHUB_REPOSITORY:-langfuse/internal-ax}"
 )
+if [ -n "${SKILL_GITHUB_TOKEN:-}" ]; then
+  SECRET_ARGS+=(SKILL_GITHUB_TOKEN="$SKILL_GITHUB_TOKEN")
+  echo "Including read-only GitHub token for commit-pinned runtime skills"
+fi
 # Optional separate scratch project the agents get as their LANGFUSE_* env.
 if [ -n "${SANDBOX_LANGFUSE_PUBLIC_KEY:-}" ]; then
   SECRET_ARGS+=(
