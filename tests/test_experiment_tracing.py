@@ -50,6 +50,30 @@ def test_detect_skill_reads_from_generic_tool_input(tmp_path) -> None:
     ]
 
 
+def test_detect_claude_skill_tool_as_entrypoint_read(tmp_path) -> None:
+    skill = _skill(tmp_path)
+    observations = [
+        SimpleNamespace(
+            id="skill-tool",
+            type="TOOL",
+            name="Tool: Skill",
+            input='{"skill": "example"}',
+        ),
+        SimpleNamespace(
+            id="other-skill-tool",
+            type="TOOL",
+            name="Tool: Skill",
+            input={"skill": "unrelated"},
+        ),
+    ]
+
+    detected = lf.detect_skill_reads(observations, skill)
+
+    assert [(source.id, relative) for source, relative in detected] == [
+        ("skill-tool", "SKILL.md"),
+    ]
+
+
 def test_agent_root_does_not_fall_back_to_partial_tool_tree() -> None:
     observations = [
         SimpleNamespace(
@@ -60,6 +84,19 @@ def test_agent_root_does_not_fall_back_to_partial_tool_tree() -> None:
     ]
 
     assert lf._agent_root_observation_id(observations) is None
+
+
+def test_claude_conversational_turn_is_an_agent_root() -> None:
+    observations = [
+        SimpleNamespace(
+            id="claude-root",
+            name="Conversational Turn",
+            parent_observation_id="synthetic-parent",
+            type="SPAN",
+        )
+    ]
+
+    assert lf._agent_root_observation_id(observations) == "claude-root"
 
 
 class _OtelSpan:

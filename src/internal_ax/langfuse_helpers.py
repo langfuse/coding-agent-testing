@@ -172,7 +172,12 @@ def _agent_root_observation_id(observations: list[Any]) -> str | None:
         or observation.parent_observation_id not in ids
     ]
     agents = [observation for observation in candidates if observation.type == "AGENT"]
-    selected = agents[:1]
+    claude_turns = [
+        observation
+        for observation in candidates
+        if observation.type == "SPAN" and observation.name == "Conversational Turn"
+    ]
+    selected = (agents or claude_turns)[:1]
     return selected[0].id if selected else None
 
 
@@ -196,6 +201,20 @@ def detect_skill_reads(observations: list[Any], skill: ResolvedSkill) -> list[tu
         if observation.type != "TOOL":
             continue
         value = observation.input
+        skill_tool_input = value
+        if observation.name == "Tool: Skill" and isinstance(value, str):
+            try:
+                skill_tool_input = json.loads(value)
+            except json.JSONDecodeError:
+                skill_tool_input = None
+        if (
+            observation.name == "Tool: Skill"
+            and isinstance(skill_tool_input, dict)
+            and skill_tool_input.get("skill") == skill.name
+        ):
+            key = (observation.id, "SKILL.md")
+            seen.add(key)
+            detected.append((observation, "SKILL.md"))
         text = value if isinstance(value, str) else _json(value)
         for match in _RUNTIME_SKILL_FILE_RE.finditer(text):
             relative = match.group("file")
