@@ -9,15 +9,21 @@ Migrate hardcoded prompts to Langfuse for version control, A/B testing, and depl
 
 ## Prerequisites
 
-Verify credentials before starting:
+Verify credential presence without printing secret values:
 
 ```bash
-echo $LANGFUSE_PUBLIC_KEY   # pk-...
-echo $LANGFUSE_SECRET_KEY   # sk-...
-echo $LANGFUSE_HOST         # https://cloud.langfuse.com or self-hosted
+[ -n "$LANGFUSE_PUBLIC_KEY" ] && echo "public key: set" || echo "public key: missing"
+[ -n "$LANGFUSE_SECRET_KEY" ] && echo "secret key: set" || echo "secret key: missing"
+[ -n "${LANGFUSE_BASE_URL:-${LANGFUSE_HOST:-}}" ] && echo "base url: set" || echo "base url: missing"
 ```
 
-If not set, ask user to configure them first.
+Use `LANGFUSE_BASE_URL` for current SDKs. If only `LANGFUSE_HOST` is set,
+export `LANGFUSE_BASE_URL="$LANGFUSE_HOST"`. If a CLI expects
+`LANGFUSE_HOST` and only `LANGFUSE_BASE_URL` is set, export
+`LANGFUSE_HOST="$LANGFUSE_BASE_URL"`.
+
+If credentials or the base URL are missing, ask the user to set them in their
+shell or a `.env` file. Do not ask them to paste secret keys into chat.
 
 ## Migration Flow
 
@@ -25,7 +31,7 @@ If not set, ask user to configure them first.
 1. Scan codebase for prompts
 2. Analyze templating compatibility
 3. Propose structure (names, subprompts, variables)
-4. User approves
+4. Present the plan as a progress update and continue unless a decision is blocking
 5. Create prompts in Langfuse
 6. Refactor code to use get_prompt()
 7. Link prompts to traces (if tracing enabled)
@@ -84,6 +90,12 @@ For external templating details, fetch: https://langfuse.com/faq/all/using-exter
 
 ## Step 3: Propose Structure
 
+### Choose Prompt Type
+
+Before choosing `text` or `chat`, fetch and follow
+[Chat vs Text Prompts](https://langfuse.com/docs/prompt-management/data-model#text-vs-chat-prompts).
+Do not default unrelated prompt flows to one prompt type.
+
 ### Naming Conventions
 
 | Rule | Example | Bad |
@@ -95,10 +107,10 @@ For external templating details, fetch: https://langfuse.com/faq/all/using-exter
 
 ### Identify Subprompts
 
-Extract when:
-- Same text in 2+ prompts
-- Represents distinct component (personality, safety rules, format)
-- Would need to change together
+Before extracting subprompts, fetch and follow
+[Prompt Composability](https://langfuse.com/docs/prompt-management/features/composability).
+Use composition for the reuse and shared-maintenance cases described there,
+not merely to decompose one coherent prompt flow.
 
 ### Variable Extraction
 
@@ -109,9 +121,16 @@ Extract when:
 | Per-request (`{{query}}`) | Persona/personality |
 | Environment-specific (`{{company_name}}`) | Static examples |
 
-## Step 4: Present Plan to User
+## Step 4: Present Plan and Continue
 
-Format:
+When the user explicitly requests a migration and credentials work, treat that
+request as authorization to create prompts and refactor the call sites. Present
+the inventory and plan as a progress update, then continue. Ask only when a
+materially different design choice would change behavior, required credentials
+are unavailable, or destructive cleanup needs approval. Do not stop merely to
+confirm names, prompt types, or optional tracing.
+
+Use this format:
 ```
 Found N prompts across M files:
 
@@ -128,7 +147,7 @@ Subprompts to extract:
 Variables to add:
   - {{user_name}} - hardcoded in 2 prompts
 
-Proceed?
+Proceeding with this migration.
 ```
 
 ## Step 5: Create Prompts in Langfuse
@@ -145,7 +164,7 @@ Use `langfuse.create_prompt()` with:
 - `staging` → Add later for testing
 - `latest` → Auto-applied by Langfuse
 
-For full API: fetch https://langfuse.com/docs/prompts/get-started
+For full API: fetch https://langfuse.com/docs/prompt-management/get-started
 
 ## Step 6: Refactor Code
 
@@ -161,7 +180,7 @@ messages = prompt.compile(var1=value1, var2=value2)
 - Call `.compile()` to substitute variables
 - For chat prompts, result is message array ready for API
 
-For SDK examples (Python/JS/TS): fetch https://langfuse.com/docs/prompts/get-started
+For SDK examples (Python/JS/TS): fetch https://langfuse.com/docs/prompt-management/get-started
 
 ## Step 7: Link Prompts to Traces
 
@@ -188,7 +207,7 @@ Look for:
 2. Click on **Generation**
 3. Check **Prompt** field shows name and version
 
-For tracing details: fetch https://langfuse.com/docs/prompts/get-started#link-with-langfuse-tracing
+For tracing details: fetch https://langfuse.com/docs/prompt-management/features/link-to-traces
 
 ## Step 8: Verify Migration
 

@@ -49,10 +49,16 @@ Set environment variables before making calls:
 ```bash
 export LANGFUSE_PUBLIC_KEY=pk-lf-...
 export LANGFUSE_SECRET_KEY=sk-lf-...
-export LANGFUSE_HOST=https://cloud.langfuse.com # example for EU cloud. For US cloud it's us.cloud.langfuse.com, and can also be a self-hosted URL. The server must always be specified in order to access Langfuse.
+export LANGFUSE_BASE_URL=https://cloud.langfuse.com # example for EU cloud. For US cloud it's us.cloud.langfuse.com, and can also be a self-hosted URL.
 ```
 
-If not set, ask the user for their API keys (found in Langfuse UI → Settings → API Keys).
+Check credential presence without printing secret values. If only
+`LANGFUSE_HOST` is set, export `LANGFUSE_BASE_URL="$LANGFUSE_HOST"`. If the CLI
+expects `LANGFUSE_HOST`, export `LANGFUSE_HOST="$LANGFUSE_BASE_URL"`.
+
+If credentials or the base URL are missing, ask the user to set them in their
+shell or a `.env` file (keys are found in Langfuse UI → Settings → API Keys).
+Do not ask them to paste secret keys into chat.
 
 ### Detailed CLI Reference
 
