@@ -69,6 +69,8 @@ envs/
   <name>/             starter workspaces; dataset items reference them via
                       metadata.env_folder and the folder is copied into the
                       sandbox's /workspace before the agent starts
+runtime-skills/
+  <name>/             Agent Skills selected by exact commit + path at run time
 scripts/
   seed_dataset.py     create the "code-agent-dataset" dataset in Langfuse
   bootstrap_modal.sh  create the project secret, deploy, print the webhook URL
@@ -88,8 +90,19 @@ Langfuse" only makes sense if there is an application. Those items set
    agent — the agent wakes up inside the project.
 3. Items without `env_folder` start in an empty `/workspace` as before.
 
-Folder names are validated (`[A-Za-z0-9][A-Za-z0-9_-]*`) since metadata is
-editable in the Langfuse UI and ends up in a shell command.
+Environment paths may contain nested groups such as
+`prompt-migration-skill-testing/01`. Each path component is restricted to
+letters, numbers, `_`, and `-` because metadata is editable in the Langfuse UI.
+
+### Temporary commit-pinned runtime skills
+
+Skills under `runtime-skills/` are temporary experiment inputs, not content
+intended to be merged. Commit and push a skill on a test branch, then select its
+exact commit and path using the experiment payload below. The harness installs
+it in the agent's standard skill directory without changing the dataset prompt;
+the agent decides whether to use it. Skill identity is recorded in run metadata,
+and detected skill-file reads appear at their original position in the trace.
+See [`runtime-skills/README.md`](runtime-skills/README.md) for the workflow.
 
 ---
 
@@ -134,7 +147,8 @@ project never requires re-entering the agent API keys:
 
 - `internal-ax` (base, one-time): `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 - `internal-ax-project`: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`,
-  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`, and optionally `SANDBOX_LANGFUSE_*`
+  `LANGFUSE_BASE_URL`, `WEBHOOK_SECRET`, a read-only `SKILL_GITHUB_TOKEN`,
+  and optionally `SANDBOX_LANGFUSE_*`
 
 **Two Langfuse projects** (recommended): the harness project holds the dataset
 + the execution traces; a separate scratch project is what agents see as
@@ -162,6 +176,9 @@ bash scripts/bootstrap_modal.sh
 It prints the exact webhook URL to paste into Langfuse
 (`https://<workspace>--internal-ax-webhook.modal.run?token=...`). Re-run it any
 time you point at a different Langfuse project.
+
+`SKILL_GITHUB_TOKEN` is centrally managed and only needs read-only repository
+contents access; individual experiment users do not need their own token.
 
 **c. Smoke-test the full path synchronously** (no webhook involved — failures
 surface in your terminal):
@@ -194,6 +211,10 @@ recorded per generation in the trace and as run metadata):
   "run_configs": ["claude-code", "codex"],
   "run_name": "baseline-2026-06",
   "models": { "claude-code": "opus", "codex": "gpt-5.5-codex" },
+  "skill": {
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "path": "runtime-skills/langfuse"
+  },
   "reset_sandbox": true
 }
 ```
@@ -216,7 +237,9 @@ Now click **Run** in the Langfuse dataset UI. Or trigger it yourself:
 ```bash
 python scripts/trigger_webhook.py \
   --url "https://<workspace>--internal-ax-webhook.modal.run?token=$WEBHOOK_SECRET" \
-  --dataset code-agent-dataset
+  --dataset code-agent-dataset \
+  --skill-commit 0123456789abcdef0123456789abcdef01234567 \
+  --skill-path runtime-skills/langfuse
 ```
 
 Results appear under the dataset's **Runs** tab: **one experiment run per

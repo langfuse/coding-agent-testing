@@ -11,6 +11,7 @@ import modal
 
 from internal_ax.config import MODAL_SECRET_NAMES, SANDBOX_TIMEOUT_S
 from internal_ax.images import AGENT_IMAGE
+from internal_ax.skills import ResolvedSkill
 
 _LF_KEYS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
 
@@ -34,9 +35,11 @@ def _langfuse_env() -> dict[str, str]:
     return env
 
 
-# Env folder names come from dataset item metadata (user-editable in the
-# Langfuse UI) and end up in shell commands/paths — keep them strict.
-_ENV_FOLDER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+# Env folder paths come from dataset item metadata (user-editable in the
+# Langfuse UI). Allow nested groups, but keep every path component strict.
+_ENV_FOLDER_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9][A-Za-z0-9_-]*)*$"
+)
 
 # Starter workspaces: /opt/envs inside the orchestrator container (shipped with
 # ORCHESTRATOR_IMAGE), the repo's envs/ when running locally.
@@ -77,6 +80,8 @@ def run_agent(
     agent_cmd: str,
     collect_files: list[str] | None = None,
     env_folder: str | None = None,
+    skill: ResolvedSkill | None = None,
+    skill_home: str | None = None,
 ) -> SandboxResult:
     """Spin up an isolated sandbox, run setup then the agent command, tear down.
 
@@ -89,6 +94,8 @@ def run_agent(
     instead of an empty directory.
     """
     env_src = _resolve_env_folder(env_folder) if env_folder else None
+    if skill is not None and not skill_home:
+        raise ValueError("skill_home is required when a skill is supplied")
 
     secrets = [
         *[modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES],
@@ -104,6 +111,9 @@ def run_agent(
     try:
         if env_src is not None:
             _upload_dir(sb, env_src, "/workspace")
+        if skill is not None:
+            sb.exec("mkdir", "-p", f"{skill_home}/{skill.name}").wait()
+            _upload_dir(sb, skill.root, f"{skill_home}/{skill.name}")
         for cmd in ["mkdir -p /workspace", *setup_cmds]:
             p = sb.exec("bash", "-lc", cmd)
             p.wait()

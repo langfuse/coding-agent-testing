@@ -22,6 +22,8 @@ def main() -> None:
     ap.add_argument("--dataset", required=True, help="Langfuse dataset name")
     ap.add_argument("--run-configs", nargs="*", default=None, help="subset of run config keys")
     ap.add_argument("--run-name", default=None)
+    ap.add_argument("--skill-commit", help="full git SHA containing the skill")
+    ap.add_argument("--skill-path", help="path below runtime-skills/ at that commit")
     args = ap.parse_args()
 
     inner: dict = {}
@@ -29,6 +31,10 @@ def main() -> None:
         inner["run_configs"] = args.run_configs
     if args.run_name:
         inner["run_name"] = args.run_name
+    if bool(args.skill_commit) != bool(args.skill_path):
+        ap.error("--skill-commit and --skill-path must be supplied together")
+    if args.skill_commit:
+        inner["skill"] = {"commit": args.skill_commit, "path": args.skill_path}
 
     body = {
         "projectId": "local-test",

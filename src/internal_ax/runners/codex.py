@@ -26,9 +26,10 @@ import uuid
 from internal_ax import langfuse_helpers as lf
 from internal_ax import scoring
 from internal_ax.config import RunConfig
-from internal_ax.langfuse_helpers import DatasetItem
+from internal_ax.langfuse_helpers import DatasetItem, ExperimentContext
 from internal_ax.runners import RunResult
 from internal_ax.runners._sandbox import run_agent
+from internal_ax.skills import ResolvedSkill
 
 _LAST_MESSAGE_PATH = "/tmp/codex-last-message.txt"
 
@@ -38,9 +39,18 @@ _CODEX_SETUP = [
 
 
 def run(
-    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+    item: DatasetItem,
+    config: RunConfig,
+    run_name: str,
+    app,
+    model: str | None = None,
+    *,
+    skill: ResolvedSkill | None = None,
+    experiment: ExperimentContext | None = None,
 ) -> RunResult:
     metadata = {"dataset_item_id": item.id, "run_name": run_name, "run_config": config.key}
+    if skill:
+        metadata.update(skill.metadata())
     # The plugin (>= PR #24) derives main-thread trace ids from
     # LANGFUSE_CODEX_TRACE_SEED as createTraceId(f"{seed}:{turn}"); one
     # `codex exec` prompt is one turn, so the trace id is known upfront.
@@ -81,6 +91,8 @@ def run(
             ),
             collect_files=[_LAST_MESSAGE_PATH],
             env_folder=item.env_folder,
+            skill=skill,
+            skill_home="/root/.agents/skills",
         )
         output = res.files.get(_LAST_MESSAGE_PATH, "") or res.stdout
         transcript = res.stdout + "\n" + res.stderr
@@ -97,12 +109,29 @@ def run(
         for tid in trace_ids:
             for name, s in scores.items():
                 lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
+            run_metadata = {
+                "agent": config.key,
+                "harness": "internal-ax",
+                "model": model or "cli-default",
+            }
+            if skill:
+                run_metadata.update(skill.metadata())
+            run_metadata["execution"] = "modal"
+            skill_read_ids = lf.annotate_skill_reads(trace_id=tid, skill=skill)
+            run_metadata["skill_reads_detected"] = len(skill_read_ids)
+            lf.register_native_experiment_item(
+                experiment=experiment,
+                item=item,
+                trace_id=tid,
+                output=output,
+                run_metadata=run_metadata,
+            )
             lf.link_trace_to_run(
                 run_name=run_name,
                 dataset_item_id=item.id,
                 trace_id=tid,
                 run_description=f"{config.label} via internal-ax on Modal",
-                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
+                metadata=run_metadata,
             )
         lf.flush()
 
