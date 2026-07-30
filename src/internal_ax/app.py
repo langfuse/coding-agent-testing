@@ -17,6 +17,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import uuid
 
 import fastapi
 import modal
@@ -28,34 +29,85 @@ from internal_ax.config import (
     select_run_configs,
 )
 from internal_ax.images import ORCHESTRATOR_IMAGE
-from internal_ax.langfuse_helpers import DatasetItem, fetch_dataset_items
+from internal_ax.langfuse_helpers import DatasetItem, ExperimentContext, fetch_dataset
+from internal_ax.skills import ResolvedSkill, SkillRef, resolve_github_skill
 
 app = modal.App("internal-ax")
 
 _SECRETS = [modal.Secret.from_name(n) for n in MODAL_SECRET_NAMES]
 
 
-def _dispatch(item: DatasetItem, config, run_name: str, model: str | None):
+def _dispatch(
+    item: DatasetItem,
+    config,
+    run_name: str,
+    model: str | None,
+    *,
+    skill: ResolvedSkill | None = None,
+    experiment: ExperimentContext | None = None,
+):
     """Route one cell to its runner. Imports are local so cold starts stay light."""
     rt = config.run_type
     if rt == RunType.CLAUDE_CODE:
         from internal_ax.runners import claude_code
 
-        return claude_code.run(item, config, run_name, app, model=model)
+        return claude_code.run(
+            item,
+            config,
+            run_name,
+            app,
+            model=model,
+            skill=skill,
+            experiment=experiment,
+        )
     if rt == RunType.CODEX:
         from internal_ax.runners import codex
 
-        return codex.run(item, config, run_name, app, model=model)
+        return codex.run(
+            item,
+            config,
+            run_name,
+            app,
+            model=model,
+            skill=skill,
+            experiment=experiment,
+        )
     raise ValueError(f"unknown run type: {rt}")
 
 
 @app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=3600)
 def run_unit(unit: dict) -> dict:
-    item = DatasetItem(**unit["item"])
-    config = run_config_by_key(unit["config_key"])
-    if config is None:
-        return {"ok": False, "error": f"unknown run config {unit['config_key']}"}
-    return _dispatch(item, config, unit["run_name"], unit.get("model")).as_dict()
+    try:
+        item = DatasetItem(**unit["item"])
+        config = run_config_by_key(unit["config_key"])
+        if config is None:
+            return {"ok": False, "error": f"unknown run config {unit['config_key']}"}
+        skill_ref = SkillRef.from_dict(unit.get("skill"))
+        experiment = ExperimentContext.from_dict(unit.get("experiment"))
+        if skill_ref is None:
+            return _dispatch(
+                item,
+                config,
+                unit["run_name"],
+                unit.get("model"),
+                experiment=experiment,
+            ).as_dict()
+        with resolve_github_skill(skill_ref) as skill:
+            return _dispatch(
+                item,
+                config,
+                unit["run_name"],
+                unit.get("model"),
+                skill=skill,
+                experiment=experiment,
+            ).as_dict()
+    except Exception as exc:  # noqa: BLE001 — map cells must report, not abort the full run
+        return {
+            "ok": False,
+            "run_config": unit.get("config_key"),
+            "dataset_item_id": (unit.get("item") or {}).get("id"),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 @app.function(image=ORCHESTRATOR_IMAGE, secrets=_SECRETS, timeout=3600)
@@ -72,6 +124,7 @@ def orchestrate(payload: dict) -> dict:
     ts = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")
     base_run_name = cfg.get("run_name") or f"{dataset_name}-{ts}"
     run_configs = select_run_configs(cfg.get("run_configs"))
+    skill_ref = SkillRef.from_dict(cfg.get("skill"))
 
     # Wipe agent-created artifacts (datasets/prompts/traces) from the scratch
     # project so earlier runs can't contaminate this one. Payload
@@ -84,7 +137,16 @@ def orchestrate(payload: dict) -> dict:
     # Unset -> each CLI's default (currently claude-sonnet-4-6 / gpt-5.5).
     models = cfg.get("models") or {}
 
-    items = fetch_dataset_items(dataset_name)
+    dataset_id, items = fetch_dataset(dataset_name)
+    experiments = {
+        rc.key: ExperimentContext(
+            id=str(uuid.uuid4()),
+            name=f"{base_run_name}-{rc.key}",
+            dataset_id=dataset_id,
+            description=f"{rc.label} via internal-ax on Modal",
+        )
+        for rc in run_configs
+    }
     # One Langfuse experiment (dataset run) PER agent: "<base>-<config key>",
     # so Claude Code and Codex results stay comparable side by side in the UI.
     units = [
@@ -98,6 +160,8 @@ def orchestrate(payload: dict) -> dict:
             "config_key": rc.key,
             "run_name": f"{base_run_name}-{rc.key}",
             "model": models.get(rc.key),
+            "skill": skill_ref.as_dict() if skill_ref else None,
+            "experiment": experiments[rc.key].as_dict(),
         }
         for it in items
         for rc in run_configs
@@ -111,6 +175,9 @@ def orchestrate(payload: dict) -> dict:
         "run_name": base_run_name,
         "runs": sorted({u["run_name"] for u in units}),
         "dataset": dataset_name,
+        "experiment_ids": {
+            key: experiment.id for key, experiment in experiments.items()
+        },
         "units": len(units),
         "ok": sum(1 for r in results if r.get("ok")),
         "failed": sum(1 for r in results if not r.get("ok")),
@@ -141,7 +208,13 @@ async def webhook(request: fastapi.Request) -> dict:
 
 
 @app.local_entrypoint()
-def smoke_test(dataset: str = "code-agent-dataset", run_configs: str = "", run_name: str = ""):
+def smoke_test(
+    dataset: str = "code-agent-dataset",
+    run_configs: str = "",
+    run_name: str = "",
+    skill_commit: str = "",
+    skill_path: str = "",
+):
     """Validate the full agent path without the webhook:
 
         modal run -m internal_ax.app --dataset code-agent-dataset
@@ -154,4 +227,8 @@ def smoke_test(dataset: str = "code-agent-dataset", run_configs: str = "", run_n
         payload["payload"]["run_configs"] = [k.strip() for k in run_configs.split(",") if k.strip()]
     if run_name:
         payload["payload"]["run_name"] = run_name
+    if bool(skill_commit) != bool(skill_path):
+        raise ValueError("skill_commit and skill_path must be supplied together")
+    if skill_commit:
+        payload["payload"]["skill"] = {"commit": skill_commit, "path": skill_path}
     print(orchestrate.remote(payload))

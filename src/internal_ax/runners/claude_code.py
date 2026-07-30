@@ -22,9 +22,10 @@ import uuid
 from internal_ax import langfuse_helpers as lf
 from internal_ax import scoring
 from internal_ax.config import RunConfig
-from internal_ax.langfuse_helpers import DatasetItem
+from internal_ax.langfuse_helpers import DatasetItem, ExperimentContext
 from internal_ax.runners import RunResult
 from internal_ax.runners._sandbox import run_agent
+from internal_ax.skills import ResolvedSkill
 
 
 def _parse_result(stdout: str) -> str:
@@ -35,7 +36,14 @@ def _parse_result(stdout: str) -> str:
 
 
 def run(
-    item: DatasetItem, config: RunConfig, run_name: str, app, model: str | None = None
+    item: DatasetItem,
+    config: RunConfig,
+    run_name: str,
+    app,
+    model: str | None = None,
+    *,
+    skill: ResolvedSkill | None = None,
+    experiment: ExperimentContext | None = None,
 ) -> RunResult:
     session_id = str(uuid.uuid4())  # we choose it; the plugin reports it to Langfuse
     # Shown as the trace's user in the Langfuse UI — pure annotation.
@@ -69,6 +77,8 @@ def run(
                 f"--output-format json --dangerously-skip-permissions{model_flag} < /dev/null"
             ),
             env_folder=item.env_folder,
+            skill=skill,
+            skill_home="/root/.claude/skills",
         )
         output = _parse_result(res.stdout)
         transcript = res.stdout + "\n" + res.stderr
@@ -85,12 +95,29 @@ def run(
         for tid in trace_ids:
             for name, s in scores.items():
                 lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
+            metadata = {
+                "agent": config.key,
+                "harness": "internal-ax",
+                "model": model or "cli-default",
+            }
+            if skill:
+                metadata.update(skill.metadata())
+            metadata["execution"] = "modal"
+            skill_read_ids = lf.annotate_skill_reads(trace_id=tid, skill=skill)
+            metadata["skill_reads_detected"] = len(skill_read_ids)
+            lf.register_native_experiment_item(
+                experiment=experiment,
+                item=item,
+                trace_id=tid,
+                output=output,
+                run_metadata=metadata,
+            )
             lf.link_trace_to_run(
                 run_name=run_name,
                 dataset_item_id=item.id,
                 trace_id=tid,
                 run_description=f"{config.label} via internal-ax on Modal",
-                metadata={"agent": config.key, "harness": "internal-ax", "model": model or "cli-default"},
+                metadata=metadata,
             )
         lf.flush()
 
