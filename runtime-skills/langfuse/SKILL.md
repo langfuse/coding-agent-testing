@@ -25,7 +25,7 @@ Follow these principles for ALL Langfuse work:
 1. **Documentation First**: NEVER implement based on memory. Always fetch current docs before writing code (Langfuse updates frequently) See the section below on how to access documentation.
 2. **CLI for Data Access**: Use `langfuse-cli` when querying/modifying Langfuse data. See the section below on how to use the CLI. 
 3. **Best Practices by Use Case**: Check the relevant reference file below for use-case-specific guidelines before implementing
-4. **Use latest Langfuse versions**: Unless the user specified otherwise or there's a good reason, always use the latest version of Langfuse SDKs/APIs.
+4. **Use current, non-deprecated versions**: Always use the newest non-deprecated API, SDK, or CLI path, and treat any deprecated/legacy/replacement note as a requirement to switch even if the old path still works. Don't switch to an older version because of resource naming such as traces/dataset, use their equivalent newer version, even if the name is not exactly the same terminology that the user used. Use an older version only when the user explicitly asks; if the current one can't satisfy the request, explain and ask before falling back.
 
 
 ## Use case specific references

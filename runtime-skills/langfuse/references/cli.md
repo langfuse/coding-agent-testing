@@ -46,6 +46,4 @@ export LANGFUSE_HOST=https://cloud.langfuse.com
 - Use `--curl` to preview the HTTP request without executing
 - Pagination: use `--limit` and `--page` on list endpoints
 - All list commands support filtering — check `<resource> <action> --help` for available options
-- Prefer `observations-v2s` over `observations` — the v2 endpoint returns richer data
-- Prefer `metrics-v2s` over `metrics` — the v2 endpoint returns richer data
-- Prefer `score-v2s` over `scores` — the v1 `scores` resource only supports create/delete; use `score-v2s` for list and get operations
+- A CLI resource name does not tell you whether its endpoint is current — verify against the latest docs before using one. For reads, use the current versioned resources: `observations-v2s` (not `observations`) and `metrics-v2s` (not `metrics`). Note the CLI's `score-v2s` read targets the **deprecated** v2 scores endpoint; the current read path is the v3 scores API, so read scores via the v3 REST API/SDK unless you confirm the CLI exposes a current (v3) resource.
