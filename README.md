@@ -94,22 +94,24 @@ Environment paths may contain nested groups such as
 `prompt-migration-skill-testing/01`. Each path component is restricted to
 letters, numbers, `_`, and `-` because metadata is editable in the Langfuse UI.
 
-### Temporary commit-pinned runtime skills
+### Commit-pinned skill-version testing
 
-Skills under `runtime-skills/` are temporary experiment inputs, not content
-intended to be merged. Commit and push a skill on a test branch, then select its
-exact commit and path using the experiment payload below. The harness installs
-it in the agent's standard skill directory without changing the dataset prompt;
-the agent decides whether to use it. Skill identity is recorded in run metadata,
-and detected skill-file reads appear at their original position in the trace.
-See [`runtime-skills/README.md`](runtime-skills/README.md) for the workflow.
+Push the version below `runtime-skills/` and select it by its exact commit and
+path. The skill commit does not need to be merged. See the
+[`runtime-skills/README.md` checklist](runtime-skills/README.md).
 
 ---
 
-## Prerequisites
+## Infrastructure setup (maintainers only)
+
+Sections 1–3 and the webhook setup are one-time company setup. Experiment
+runners can skip them; they do not need to configure Modal or any credentials.
+
+Maintainer prerequisites:
 
 - A **Langfuse Cloud** project (Python SDK v4).
-- A **Modal** account (`pip install modal && modal token new`).
+- Access to the company **Modal** workspace (`pip install modal && modal token
+  new`).
 - **Anthropic** (Claude Code) and **OpenAI** (Codex) API keys.
 
 ## 1. Local setup
@@ -191,7 +193,9 @@ modal run -m internal_ax.app --dataset code-agent-dataset --run-configs codex
 Then check Langfuse: the dataset's **Runs** tab should show one run with a
 linked, scored trace per item.
 
-## 4. Wire up the Langfuse remote dataset run
+## 4. Langfuse remote dataset run
+
+### Maintainers: configure the company webhook once
 
 In Langfuse: open the dataset → **Start Experiment** → **Custom Experiment** →
 the ⚡ (lightning) icon → set the **webhook URL** to your Modal endpoint **with
@@ -200,6 +204,11 @@ the token appended**:
 ```
 https://<workspace>--internal-ax-webhook.modal.run?token=<WEBHOOK_SECRET>
 ```
+
+### Experiment runners: run the experiment
+
+Select the existing company webhook and provide the payload for the run. If the
+webhook is unavailable, ask an internal-ax maintainer.
 
 Optionally set a default **payload** (JSON) to narrow the matrix, name the run,
 or pin per-agent models (unset = each CLI's default; currently
@@ -241,6 +250,10 @@ python scripts/trigger_webhook.py \
   --skill-commit 0123456789abcdef0123456789abcdef01234567 \
   --skill-path runtime-skills/langfuse
 ```
+
+The experiment runs asynchronously, and a run appears in Langfuse only after
+its first result is linked. The **Runs** tab can remain blank for several
+minutes; do not click **Run** again unless you intend to start a duplicate.
 
 Results appear under the dataset's **Runs** tab: **one experiment run per
 agent**, named `<base run name>-<config key>` (e.g. `baseline-2026-06-claude-code`
