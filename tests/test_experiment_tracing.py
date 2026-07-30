@@ -165,3 +165,40 @@ def test_native_experiment_attributes_are_added_to_agent_trace() -> None:
         "langfuse.experiment.metadata.agent": "codex",
         "langfuse.experiment.item.metadata.case_id": "01",
     }
+
+
+def test_sandbox_reset_uses_api_client_without_registering_langfuse_client(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-harness")
+    monkeypatch.setenv("SANDBOX_LANGFUSE_PUBLIC_KEY", "pk-sandbox")
+    monkeypatch.setenv("SANDBOX_LANGFUSE_SECRET_KEY", "sk-sandbox")
+    monkeypatch.setenv(
+        "SANDBOX_LANGFUSE_BASE_URL", "https://sandbox.langfuse.example"
+    )
+    empty_page = SimpleNamespace(data=[])
+    fake_api = SimpleNamespace(
+        datasets=SimpleNamespace(list=lambda **kwargs: empty_page),
+        prompts=SimpleNamespace(list=lambda **kwargs: empty_page),
+        trace=SimpleNamespace(list=lambda **kwargs: empty_page),
+    )
+
+    with patch(
+        "langfuse.api.client.LangfuseAPI", return_value=fake_api
+    ) as api_client:
+        stats = lf.reset_sandbox_project()
+
+    assert stats == {
+        "dataset_runs": 0,
+        "dataset_items": 0,
+        "prompts": 0,
+        "traces": 0,
+        "errors": 0,
+    }
+    api_client.assert_called_once_with(
+        base_url="https://sandbox.langfuse.example",
+        username="pk-sandbox",
+        password="sk-sandbox",
+        x_langfuse_sdk_name="internal-ax",
+        x_langfuse_public_key="pk-sandbox",
+    )

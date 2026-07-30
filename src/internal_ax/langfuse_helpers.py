@@ -439,7 +439,7 @@ def reset_sandbox_project() -> dict:
     """
     import os
 
-    from langfuse import Langfuse
+    from langfuse.api.client import LangfuseAPI
 
     pk = os.environ.get("SANDBOX_LANGFUSE_PUBLIC_KEY")
     sk = os.environ.get("SANDBOX_LANGFUSE_SECRET_KEY")
@@ -448,13 +448,20 @@ def reset_sandbox_project() -> dict:
     if pk == os.environ.get("LANGFUSE_PUBLIC_KEY"):
         return {"skipped": "sandbox keys identical to harness keys — refusing to reset"}
 
-    sandbox = Langfuse(
-        public_key=pk,
-        secret_key=sk,
-        host=os.environ.get("SANDBOX_LANGFUSE_BASE_URL", "https://cloud.langfuse.com"),
-        tracing_enabled=False,
+    # Use the generated API client directly instead of creating a second
+    # top-level Langfuse client. Top-level clients are registered globally by
+    # public key; once both the harness and sandbox clients exist, an
+    # unqualified get_client() is intentionally disabled to prevent
+    # cross-project leakage.
+    api = LangfuseAPI(
+        base_url=os.environ.get(
+            "SANDBOX_LANGFUSE_BASE_URL", "https://cloud.langfuse.com"
+        ),
+        username=pk,
+        password=sk,
+        x_langfuse_sdk_name="internal-ax",
+        x_langfuse_public_key=pk,
     )
-    api = sandbox.api
     stats = {"dataset_runs": 0, "dataset_items": 0, "prompts": 0, "traces": 0, "errors": 0}
 
     def guarded(fn, *args, **kwargs):
