@@ -28,7 +28,7 @@ from internal_ax import scoring
 from internal_ax.config import RunConfig
 from internal_ax.langfuse_helpers import DatasetItem, ExperimentContext
 from internal_ax.runners import RunResult
-from internal_ax.runners._sandbox import run_agent
+from internal_ax.runners._sandbox import EnvironmentNotFoundError, run_agent
 from internal_ax.skills import ResolvedSkill
 
 _LAST_MESSAGE_PATH = "/tmp/codex-last-message.txt"
@@ -138,6 +138,33 @@ def run(
         ok = bool(trace_ids) and res.returncode == 0
         err = None if ok else f"returncode={res.returncode}, traces_found={len(trace_ids)}, stderr={res.stderr[-500:]}"
         return RunResult(config.key, item.id, ok=ok, trace_ids=trace_ids, scores=scores, error=err)
+    except EnvironmentNotFoundError as e:
+        run_metadata = {
+            "agent": config.key,
+            "harness": "internal-ax",
+            "model": model or "cli-default",
+            "execution": "modal",
+        }
+        if skill:
+            run_metadata.update(skill.metadata())
+        trace_ids: list[str] = []
+        error = str(e)
+        try:
+            trace_ids.append(
+                lf.record_experiment_item_failure(
+                    experiment=experiment,
+                    item=item,
+                    run_name=run_name,
+                    run_description=f"{config.label} via internal-ax on Modal",
+                    run_metadata=run_metadata,
+                    failure_type="environment_not_found",
+                    message=error,
+                )
+            )
+        except Exception as trace_error:  # noqa: BLE001
+            error = f"{error}; failed to record Langfuse error span: {trace_error!r}"
+        lf.flush()
+        return RunResult(config.key, item.id, ok=False, trace_ids=trace_ids, error=error)
     except Exception as e:  # noqa: BLE001
         lf.flush()
         tb = traceback.format_exc(limit=8)

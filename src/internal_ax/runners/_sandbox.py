@@ -46,6 +46,10 @@ _ENV_FOLDER_RE = re.compile(
 _ENVS_ROOTS = [Path("/opt/envs"), Path(__file__).resolve().parents[3] / "envs"]
 
 
+class EnvironmentNotFoundError(FileNotFoundError):
+    """A dataset item references an environment unavailable to the runner."""
+
+
 def _resolve_env_folder(name: str) -> Path:
     if not _ENV_FOLDER_RE.fullmatch(name):
         raise ValueError(f"invalid env_folder name: {name!r}")
@@ -53,7 +57,9 @@ def _resolve_env_folder(name: str) -> Path:
         candidate = root / name
         if candidate.is_dir():
             return candidate
-    raise FileNotFoundError(f"env_folder {name!r} not found under {[str(r) for r in _ENVS_ROOTS]}")
+    raise EnvironmentNotFoundError(
+        f"env_folder {name!r} not found under {[str(r) for r in _ENVS_ROOTS]}"
+    )
 
 
 def _upload_dir(sb: modal.Sandbox, src: Path, dest: str) -> None:
