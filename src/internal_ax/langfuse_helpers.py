@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -314,6 +315,24 @@ def register_native_experiment_item(
             **run_metadata,
         },
     )
+    _set_native_experiment_attributes(
+        span=span,
+        experiment=experiment,
+        item=item,
+        run_metadata=run_metadata,
+    )
+    span.end()
+    return span.id
+
+
+def _set_native_experiment_attributes(
+    *,
+    span: Any,
+    experiment: ExperimentContext,
+    item: DatasetItem,
+    run_metadata: dict[str, Any],
+) -> None:
+    """Mark a span as one dataset item in a native Langfuse experiment."""
     otel_span = span._otel_span
     attributes = {
         "langfuse.experiment.id": experiment.id,
@@ -331,8 +350,65 @@ def register_native_experiment_item(
         _set_scalar_attribute(otel_span, f"langfuse.experiment.metadata.{key}", value)
     for key, value in item.metadata.items():
         _set_scalar_attribute(otel_span, f"langfuse.experiment.item.metadata.{key}", value)
+
+
+def record_experiment_item_failure(
+    *,
+    experiment: ExperimentContext | None,
+    item: DatasetItem,
+    run_name: str,
+    run_description: str,
+    run_metadata: dict[str, Any],
+    failure_type: str,
+    message: str,
+) -> str:
+    """Create and link a failed experiment item when the agent never started."""
+    trace_id = deterministic_trace_id(f"failure:{uuid.uuid4()}")
+    output = {
+        "status": "failed",
+        "failure_type": failure_type,
+        "message": message,
+    }
+    span = client().start_observation(
+        trace_context={"trace_id": trace_id},
+        name="load-environment",
+        as_type="span",
+        input=item.input,
+        output=output,
+        metadata={
+            **run_metadata,
+            "env_folder": item.env_folder,
+            "failure_stage": "environment_setup",
+            "failure_type": failure_type,
+        },
+        level="ERROR",
+        status_message=message,
+    )
+    if experiment is not None:
+        _set_native_experiment_attributes(
+            span=span,
+            experiment=experiment,
+            item=item,
+            run_metadata={
+                **run_metadata,
+                "failure_stage": "environment_setup",
+                "failure_type": failure_type,
+            },
+        )
     span.end()
-    return span.id
+    client().flush()
+    link_trace_to_run(
+        run_name=run_name,
+        dataset_item_id=item.id,
+        trace_id=trace_id,
+        run_description=run_description,
+        metadata={
+            **run_metadata,
+            "failure_stage": "environment_setup",
+            "failure_type": failure_type,
+        },
+    )
+    return trace_id
 
 
 def link_trace_to_run(

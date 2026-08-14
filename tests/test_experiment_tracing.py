@@ -167,6 +167,85 @@ def test_native_experiment_attributes_are_added_to_agent_trace() -> None:
     }
 
 
+def test_environment_failure_is_visible_as_experiment_item() -> None:
+    span = _Span()
+    captured = {}
+
+    def start_observation(**kwargs):
+        captured.update(kwargs)
+        return span
+
+    fake_client = SimpleNamespace(start_observation=start_observation, flush=lambda: None)
+    experiment = ExperimentContext(
+        id="experiment-id",
+        name="native-test-codex",
+        dataset_id="dataset-id",
+        description="Native test",
+    )
+    item = DatasetItem(
+        id="item-id",
+        input={"prompt": "test"},
+        expected_output={"answer": "expected"},
+        metadata={"env_folder": "missing-environment"},
+    )
+
+    with (
+        patch.object(lf, "client", return_value=fake_client),
+        patch.object(lf, "deterministic_trace_id", return_value="1" * 32),
+        patch.object(lf, "link_trace_to_run") as link_trace_to_run,
+    ):
+        trace_id = lf.record_experiment_item_failure(
+            experiment=experiment,
+            item=item,
+            run_name="test-run-codex",
+            run_description="Codex via internal-ax on Modal",
+            run_metadata={"agent": "codex"},
+            failure_type="environment_not_found",
+            message="env_folder 'missing-environment' not found",
+        )
+
+    assert trace_id == "1" * 32
+    assert span.ended
+    assert captured == {
+        "trace_context": {"trace_id": "1" * 32},
+        "name": "load-environment",
+        "as_type": "span",
+        "input": {"prompt": "test"},
+        "output": {
+            "status": "failed",
+            "failure_type": "environment_not_found",
+            "message": "env_folder 'missing-environment' not found",
+        },
+        "metadata": {
+            "agent": "codex",
+            "env_folder": "missing-environment",
+            "failure_stage": "environment_setup",
+            "failure_type": "environment_not_found",
+        },
+        "level": "ERROR",
+        "status_message": "env_folder 'missing-environment' not found",
+    }
+    assert (
+        span._otel_span.attributes["langfuse.experiment.item.root_observation_id"]
+        == "experiment-span-id"
+    )
+    assert (
+        span._otel_span.attributes["langfuse.experiment.metadata.failure_type"]
+        == "environment_not_found"
+    )
+    link_trace_to_run.assert_called_once_with(
+        run_name="test-run-codex",
+        dataset_item_id="item-id",
+        trace_id="1" * 32,
+        run_description="Codex via internal-ax on Modal",
+        metadata={
+            "agent": "codex",
+            "failure_stage": "environment_setup",
+            "failure_type": "environment_not_found",
+        },
+    )
+
+
 def test_sandbox_reset_uses_api_client_without_registering_langfuse_client(
     monkeypatch,
 ) -> None:
