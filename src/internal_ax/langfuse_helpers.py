@@ -83,6 +83,21 @@ class DatasetItem:
             return str(self.metadata["expected_tool"])
         return None
 
+    @property
+    def expected_reference_file(self) -> str | None:
+        """The skill reference file this item expects the agent to consult.
+
+        Set via ``expected_output.invoked_reference_file``. An empty string is
+        meaningful: the item asserts the skill's entrypoint alone should
+        suffice and *no* reference file should be opened. ``None`` (key absent)
+        means the item does not test reference-file invocation at all, and the
+        score is skipped.
+        """
+        eo = self.expected_output
+        if isinstance(eo, dict) and "invoked_reference_file" in eo:
+            return str(eo["invoked_reference_file"] or "")
+        return None
+
 
 @dataclass(frozen=True)
 class ExperimentContext:
@@ -230,7 +245,22 @@ def detect_skill_reads(observations: list[Any], skill: ResolvedSkill) -> list[tu
     return detected
 
 
-def annotate_skill_reads(*, trace_id: str, skill: ResolvedSkill | None) -> list[str]:
+@dataclass(frozen=True)
+class SkillReadReport:
+    """What the agent read out of the injected skill, per trace.
+
+    ``span_ids`` are the derived annotation spans; ``files`` are the skill-
+    relative paths (e.g. ``references/cli.md``) that were opened, and are the
+    evidence the reference-file score is computed from. The order follows the
+    observation API's return order, which is **not** chronological — sort by
+    the source observation's start time before reading anything into it.
+    """
+
+    span_ids: list[str]
+    files: list[str]
+
+
+def annotate_skill_reads(*, trace_id: str, skill: ResolvedSkill | None) -> SkillReadReport:
     """Add explicit skill-read children at the original tool-call times.
 
     Agent plugins expose file reads as generic shell tools. These small spans
@@ -243,11 +273,13 @@ def annotate_skill_reads(*, trace_id: str, skill: ResolvedSkill | None) -> list[
     attribute serialization and export behavior.
     """
     if skill is None:
-        return []
+        return SkillReadReport([], [])
     observations = _trace_observations(trace_id)
 
     created: list[str] = []
+    files: list[str] = []
     for source, relative in detect_skill_reads(observations, skill):
+        files.append(relative)
         kind = "entrypoint" if relative == "SKILL.md" else "reference"
         langfuse = client()
         remote_parent = langfuse._create_remote_parent_span(
@@ -277,7 +309,7 @@ def annotate_skill_reads(*, trace_id: str, skill: ResolvedSkill | None) -> list[
             )
         span.end(end_time=_datetime_to_ns(end_time))
         created.append(span.id)
-    return created
+    return SkillReadReport(created, files)
 
 
 def register_native_experiment_item(

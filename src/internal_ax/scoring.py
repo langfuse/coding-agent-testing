@@ -61,6 +61,40 @@ def score_task_completion(output: str, expected_contains: list[str]) -> dict[str
     }
 
 
+def score_reference_file(expected_file: str, files_read: list[str]) -> dict[str, dict]:
+    """Did the agent open the skill reference file the item expects?
+
+    Evidence is the skill reads detected on the trace (see
+    ``langfuse_helpers.detect_skill_reads``), not the final answer — the point
+    is which file the skill actually reached for, which an agent frequently
+    never names in its output.
+
+    ``expected_file`` is matched on basename, so an item can say
+    ``"cli.md"`` without pinning the skill's internal layout. An empty
+    ``expected_file`` inverts the check: the item asserts the entrypoint alone
+    should suffice, so reading *any* reference file scores 0.
+    """
+    references = [f for f in files_read if f != "SKILL.md"]
+    read_list = ", ".join(references) if references else "none"
+
+    if not expected_file:
+        return {
+            "reference_file_invoked": {
+                "value": 0.0 if references else 1.0,
+                "comment": f"expected no reference file; read: {read_list}",
+            }
+        }
+
+    wanted = expected_file.rsplit("/", 1)[-1]
+    hit = any(f.rsplit("/", 1)[-1] == wanted for f in references)
+    return {
+        "reference_file_invoked": {
+            "value": 1.0 if hit else 0.0,
+            "comment": None if hit else f"expected {wanted}; read: {read_list}",
+        }
+    }
+
+
 def _judge_tool_usage(
     task_prompt: str, output: str, transcript: str, tool: str
 ) -> dict[str, dict] | None:

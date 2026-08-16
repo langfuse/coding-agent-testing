@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from internal_ax import langfuse_helpers as lf
 from internal_ax.config import RunConfig, RunType
 from internal_ax.langfuse_helpers import DatasetItem
 from internal_ax.runners import claude_code, codex
@@ -65,7 +66,11 @@ def test_runner_installs_skill_without_changing_prompt(
     with (
         patch.object(runner, "run_agent", return_value=sandbox_result) as run_agent,
         patch.object(runner.lf, "wait_for_trace", return_value=True),
-        patch.object(runner.lf, "annotate_skill_reads", return_value=[]),
+        patch.object(
+            runner.lf,
+            "annotate_skill_reads",
+            return_value=lf.SkillReadReport([], []),
+        ),
         patch.object(runner.lf, "register_native_experiment_item", return_value=None),
         patch.object(runner.lf, "score_trace"),
         patch.object(runner.lf, "link_trace_to_run"),
