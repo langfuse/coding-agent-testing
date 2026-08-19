@@ -24,6 +24,17 @@ Scores attached to every trace (the stable contract the Langfuse UI aggregates):
   final answer + activity transcript, with the judge's reasoning attached as
   the score comment. Falls back to the old substring heuristics if the judge
   call fails, so scoring never blocks a run. Lives in `scoring.py`.
+- `reference_file_invoked` — only when an item sets
+  `expected_output.invoked_reference_file` *and* a skill was injected;
+  deterministic. Evidence is the skill reads detected on the trace, not the
+  agent's prose, so it measures which file the skill actually reached for.
+  Matched on basename. An empty expected value inverts the check: the item
+  asserts `SKILL.md` alone should suffice, so opening any reference file
+  scores 0.
+
+> Scores only cover what an item declares. An item whose `expected_output`
+> sets none of these keys gets `task_completed=1` for any non-empty output —
+> that is a vacuous pass, not a good result.
 
 ---
 
@@ -135,7 +146,8 @@ One trivial plumbing check (FizzBuzz) plus one realistic branded task
 ```json
 { "input":            {"prompt": "the task handed verbatim to the agent"},
   "expected_output":  {"contains": ["substrings", "the answer must include"],
-                       "tool": "optional-tool-to-score-discovery-of"},
+                       "tool": "optional-tool-to-score-discovery-of",
+                       "invoked_reference_file": "optional-skill-reference.md"},
   "metadata":         {"env_folder": "optional-starter-workspace-under-envs/"} }
 ```
 

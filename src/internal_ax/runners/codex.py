@@ -107,8 +107,6 @@ def run(
             task_prompt=item.prompt,
         )
         for tid in trace_ids:
-            for name, s in scores.items():
-                lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
             run_metadata = {
                 "agent": config.key,
                 "harness": "internal-ax",
@@ -117,8 +115,18 @@ def run(
             if skill:
                 run_metadata.update(skill.metadata())
             run_metadata["execution"] = "modal"
-            skill_read_ids = lf.annotate_skill_reads(trace_id=tid, skill=skill)
-            run_metadata["skill_reads_detected"] = len(skill_read_ids)
+            skill_reads = lf.annotate_skill_reads(trace_id=tid, skill=skill)
+            run_metadata["skill_reads_detected"] = len(skill_reads.span_ids)
+            # Needs the trace's skill reads, so it can only be scored here.
+            # Skipped without an injected skill: there was nothing to invoke.
+            if skill is not None and item.expected_reference_file is not None:
+                scores.update(
+                    scoring.score_reference_file(
+                        item.expected_reference_file, skill_reads.files
+                    )
+                )
+            for name, s in scores.items():
+                lf.score_trace(trace_id=tid, name=name, value=s["value"], comment=s.get("comment"))
             lf.register_native_experiment_item(
                 experiment=experiment,
                 item=item,
