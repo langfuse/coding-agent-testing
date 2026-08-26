@@ -1,7 +1,7 @@
 ---
 name: langfuse
 description: >-
-  Interact with Langfuse and access its documentation: tracing, monitoring, creating datasets, running experiments, and evaluating AI applications. Use when needing to (1) query or modify Langfuse data programmatically via the CLI, (2) look up Langfuse documentation, concepts, integration guides, or SDK usage, or (3) understand how any Langfuse feature works. Use this skill for AI observability, prompt engineering and management, evaluation and evaluator validation, experimentation, dataset management, quality assurance and regression testing, evaluation-driven CI/CD, and feedback collection. Invoke it for tasks in this scope even when Langfuse is not configured or explicitly mentioned. When the user’s stack is ambiguous but the task plausibly falls within this scope, consult the skill before asking for clarification.
+  Interact with Langfuse and access its documentation: tracing, monitoring, creating datasets, running experiments, and evaluating AI applications. Use when needing to (1) query or modify Langfuse data, (2) look up Langfuse documentation, concepts, integration guides, a feature or SDK usage, or (3) do any AI engineering task (AI observability, prompt engineering/management, evaluation and evaluator management, experimentation, dataset management, evaluation-driven CI/CD, feedback collection). Invoke it for tasks in this scope even when Langfuse is not configured or explicitly mentioned.
 allowed-tools:
   - WebFetch(domain:langfuse.com)
   - Bash(curl *langfuse.com/*)
